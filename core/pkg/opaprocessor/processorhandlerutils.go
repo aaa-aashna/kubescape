@@ -2,6 +2,7 @@ package opaprocessor
 
 import (
 	"context"
+	"time"
 
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/armoapi-go/identifiers"
@@ -43,6 +44,9 @@ func (opap *OPAProcessor) updateResults(ctx context.Context) {
 	}
 
 	processor := exceptions.NewProcessor()
+
+	// filter expired exceptions before applying them
+	opap.Exceptions = filterExpiredExceptions(opap.Exceptions)
 
 	// set exceptions
 	for i := range opap.ResourcesResult {
@@ -135,6 +139,22 @@ func requiresResourceMatch(designator identifiers.PortalDesignator) bool {
 		designator.GetPath() != "" ||
 		designator.GetResourceID() != "" ||
 		len(designator.GetLabels()) != 0
+}
+
+// filterExpiredExceptions removes exception policies whose ExpirationDate has passed.
+// Policies with a nil ExpirationDate (no expiration) are kept.
+func filterExpiredExceptions(exceptions []armotypes.PostureExceptionPolicy) []armotypes.PostureExceptionPolicy {
+	if len(exceptions) == 0 {
+		return exceptions
+	}
+	now := time.Now()
+	var valid []armotypes.PostureExceptionPolicy
+	for _, e := range exceptions {
+		if e.ExpirationDate == nil || e.ExpirationDate.After(now) {
+			valid = append(valid, e)
+		}
+	}
+	return valid
 }
 
 // hasExplicitControlException reports whether an exception policy targets controlID

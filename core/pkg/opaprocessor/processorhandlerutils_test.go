@@ -2,6 +2,7 @@ package opaprocessor
 
 import (
 	"testing"
+	"time"
 
 	"github.com/armosec/armoapi-go/armotypes"
 	"github.com/armosec/armoapi-go/identifiers"
@@ -666,6 +667,89 @@ func TestGetNamespaceName(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			largeClusterSize = -1
 			assert.Equal(t, tt.want, getNamespaceName(tt.obj, tt.clusterSize))
+		})
+	}
+}
+
+func TestFilterExpiredExceptions(t *testing.T) {
+	past := time.Now().Add(-24 * time.Hour)
+	future := time.Now().Add(24 * time.Hour)
+
+	makePolicy := func(expiration *time.Time) armotypes.PostureExceptionPolicy {
+		return armotypes.PostureExceptionPolicy{
+			ExpirationDate: expiration,
+			PosturePolicies: []armotypes.PosturePolicy{
+				{ControlID: "C-0001"},
+			},
+		}
+	}
+
+	tests := []struct {
+		name       string
+		exceptions []armotypes.PostureExceptionPolicy
+		wantLen    int
+	}{
+		{
+			name:       "nil slice is returned as is",
+			exceptions: nil,
+			wantLen:    0,
+		},
+		{
+			name:       "empty slice is returned as is",
+			exceptions: []armotypes.PostureExceptionPolicy{},
+			wantLen:    0,
+		},
+		{
+			name: "nil expiration date is kept",
+			exceptions: []armotypes.PostureExceptionPolicy{
+				makePolicy(nil),
+			},
+			wantLen: 1,
+		},
+		{
+			name: "future expiration date is kept",
+			exceptions: []armotypes.PostureExceptionPolicy{
+				makePolicy(&future),
+			},
+			wantLen: 1,
+		},
+		{
+			name: "past expiration date is filtered out",
+			exceptions: []armotypes.PostureExceptionPolicy{
+				makePolicy(&past),
+			},
+			wantLen: 0,
+		},
+		{
+			name: "mixed nil, future, and past — only past is filtered",
+			exceptions: []armotypes.PostureExceptionPolicy{
+				makePolicy(nil),
+				makePolicy(&future),
+				makePolicy(&past),
+			},
+			wantLen: 2,
+		},
+		{
+			name: "all expired are filtered out",
+			exceptions: []armotypes.PostureExceptionPolicy{
+				makePolicy(&past),
+				makePolicy(&past),
+			},
+			wantLen: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := filterExpiredExceptions(tt.exceptions)
+			assert.Len(t, got, tt.wantLen)
+
+			for _, e := range got {
+				if e.ExpirationDate != nil {
+					assert.True(t, e.ExpirationDate.After(time.Now()),
+						"filtered exceptions must have future ExpirationDate")
+				}
+			}
 		})
 	}
 }
