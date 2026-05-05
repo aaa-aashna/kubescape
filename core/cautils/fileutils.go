@@ -259,33 +259,27 @@ func listFilesOrDirectories(pattern string, onlyDirectories bool) ([]string, []e
 	return paths, errs
 }
 
-func readYamlFile(yamlFile []byte) ([]workloadinterface.IMetadata, error) {
+func readYamlFile(yamlFile []byte) (yamlObjs []workloadinterface.IMetadata, _ error) {
+	yamlObjs = []workloadinterface.IMetadata{}
 	defer func() {
 		if r := recover(); r != nil {
 			logger.L().Warning(fmt.Sprintf("panic during YAML parsing: %v", r))
 		}
 	}()
 
-	yamlObjs := []workloadinterface.IMetadata{}
-
-	// Split into individual documents before parsing.
-	// yaml.v3's streaming decoder does not advance past parse errors —
-	// calling Decode again after an error loops on the same position indefinitely.
-	// Splitting by the document separator and using yaml.Unmarshal per document
-	// gives us clean per-document error isolation.
-	normalized := yamlFile
-	if bytes.HasPrefix(normalized, []byte("---")) {
-		normalized = normalized[3:]
+	normalized := bytes.TrimPrefix(yamlFile, []byte("---\n"))
+	if len(normalized) > 0 && normalized[len(normalized)-1] != '\n' {
+		normalized = append(normalized, '\n')
 	}
 
-	for _, doc := range bytes.Split(normalized, []byte("\n---")) {
+	for i, doc := range bytes.Split(normalized, []byte("\n---\n")) {
 		doc = bytes.TrimSpace(doc)
 		if len(doc) == 0 {
 			continue
 		}
 		var t interface{}
 		if err := yaml.Unmarshal(doc, &t); err != nil {
-			logger.L().Warning(fmt.Sprintf("skipping malformed YAML document: %v", err))
+			logger.L().Warning(fmt.Sprintf("skipping malformed YAML document %d: %v", i+1, err))
 			continue
 		}
 		j := convertYamlToJson(t)
@@ -305,7 +299,7 @@ func readYamlFile(yamlFile []byte) ([]workloadinterface.IMetadata, error) {
 		}
 	}
 
-	return yamlObjs, nil
+	return
 }
 
 func readJsonFile(jsonFile []byte) ([]workloadinterface.IMetadata, error) {
