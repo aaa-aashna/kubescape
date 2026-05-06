@@ -70,6 +70,11 @@ func getFrameworkCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Comm
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 
+			if scanInfo.FailThresholdSeverity != "" {
+				if err := shared.ValidateSeverity(scanInfo.FailThresholdSeverity); err != nil {
+					return err
+				}
+			}
 			if err := validateFrameworkScanInfo(scanInfo); err != nil {
 				return err
 			}

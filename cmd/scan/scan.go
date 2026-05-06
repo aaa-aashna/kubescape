@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kubescape/go-logger"
+	"github.com/kubescape/kubescape/v3/cmd/shared"
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/kubescape/v3/core/cautils/getter"
 	"github.com/kubescape/kubescape/v3/core/meta"
@@ -42,6 +43,11 @@ func GetScanCommand(ks meta.IKubescape) *cobra.Command {
 		Long:    `The action you want to perform`,
 		Example: scanCmdExamples,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if scanInfo.FailThresholdSeverity != "" {
+				if err := shared.ValidateSeverity(scanInfo.FailThresholdSeverity); err != nil {
+					return err
+				}
+			}
 			if scanInfo.View == string(cautils.SecurityViewType) {
 				setSecurityViewScanInfo(args, &scanInfo)
 
