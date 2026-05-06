@@ -63,7 +63,7 @@ func getWorkloadCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Comma
 					return err
 				}
 			}
-			if err := validateFrameworkScanInfo(scanInfo); err != nil {
+			if err := validateThresholdsOnly(scanInfo); err != nil {
 				return err
 			}
 			kind, name, err := parseWorkloadIdentifierString(args[0])

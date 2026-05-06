@@ -223,3 +223,14 @@ func validateFrameworkScanInfo(scanInfo *cautils.ScanInfo) error {
 	// Validate the user's credentials
 	return cautils.ValidateAccountID(scanInfo.AccountID)
 }
+
+// validateThresholdsOnly validates only the numeric threshold ranges
+func validateThresholdsOnly(scanInfo *cautils.ScanInfo) error {
+	if 100 < scanInfo.ComplianceThreshold || 0 > scanInfo.ComplianceThreshold {
+		return ErrBadThreshold
+	}
+	if 100 < scanInfo.FailThreshold || 0 > scanInfo.FailThreshold {
+		return ErrBadThreshold
+	}
+	return nil
+}
