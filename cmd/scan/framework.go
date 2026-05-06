@@ -225,6 +225,9 @@ func validateFrameworkScanInfo(scanInfo *cautils.ScanInfo) error {
 }
 
 // validateThresholdsOnly validates only the numeric threshold ranges
+// (compliance-threshold and fail-threshold must be between 0 and 100).
+// Unlike validateFrameworkScanInfo, this function does not mutate scanInfo
+// or enforce unrelated constraints.
 func validateThresholdsOnly(scanInfo *cautils.ScanInfo) error {
 	if 100 < scanInfo.ComplianceThreshold || 0 > scanInfo.ComplianceThreshold {
 		return ErrBadThreshold
