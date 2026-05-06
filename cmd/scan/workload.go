@@ -63,6 +63,9 @@ func getWorkloadCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Comma
 					return err
 				}
 			}
+			if err := validateFrameworkScanInfo(scanInfo); err != nil {
+				return err
+			}
 			kind, name, err := parseWorkloadIdentifierString(args[0])
 			if err != nil {
 				return fmt.Errorf("invalid input: %s", err.Error())

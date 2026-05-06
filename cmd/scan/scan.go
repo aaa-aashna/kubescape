@@ -48,6 +48,9 @@ func GetScanCommand(ks meta.IKubescape) *cobra.Command {
 					return err
 				}
 			}
+			if err := validateFrameworkScanInfo(&scanInfo); err != nil {
+				return err
+			}
 			if scanInfo.View == string(cautils.SecurityViewType) {
 				setSecurityViewScanInfo(args, &scanInfo)
 
