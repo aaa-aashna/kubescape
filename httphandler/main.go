@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"os"
+	"time"
 
 	v1 "github.com/kubescape/backend/pkg/client/v1"
 	"github.com/kubescape/backend/pkg/servicediscovery"
+	"github.com/kubescape/backend/pkg/servicediscovery/schema"
 	servicediscoveryv3 "github.com/kubescape/backend/pkg/servicediscovery/v3"
 	"github.com/kubescape/backend/pkg/utils"
 	"github.com/kubescape/backend/pkg/versioncheck"
@@ -32,6 +35,8 @@ var (
 const (
 	defaultNamespace = "kubescape"
 )
+
+var serviceDiscoveryTimeout = 10 * time.Second
 
 func main() {
 	ctx := context.Background()
@@ -112,21 +117,34 @@ func initializeLoggerLevel() {
 }
 
 func initializeSaaSEnv() {
-	apiURL := "api.armosec.io"
-	if envVar := os.Getenv("API_URL"); envVar != "" {
-		logger.L().Debug("API URL updated from env var", helpers.String("url", envVar))
-		apiURL = envVar
+	var sdGetter schema.IServiceDiscoveryServiceGetter
+
+	// Prefer file-based discovery: allows sidecar and private-cluster deployments
+	// to inject endpoints without network egress to api.armosec.io.
+	path := "/etc/config/services.json"
+	if p := os.Getenv("KS_SERVICE_DISCOVERY_FILE_PATH"); p != "" {
+		path = p
+	}
+	if _, err := os.Stat(path); err == nil {
+		logger.L().Info("using file-based service discovery", helpers.String("path", path))
+		sdGetter = servicediscoveryv3.NewServiceDiscoveryFileV3(path)
+	} else {
+		apiURL := "api.armosec.io"
+		if envVar := os.Getenv("API_URL"); envVar != "" {
+			logger.L().Debug("API URL updated from env var", helpers.String("url", envVar))
+			apiURL = envVar
+		}
+		client, err := servicediscoveryv3.NewServiceDiscoveryClientV3(apiURL)
+		if err != nil {
+			logger.L().Fatal("failed to initialize service discovery client", helpers.Error(err))
+			return
+		}
+		sdGetter = client
 	}
 
-	sdClient, err := servicediscoveryv3.NewServiceDiscoveryClientV3(apiURL)
+	backendServices, err := getServicesWithTimeout(sdGetter, serviceDiscoveryTimeout)
 	if err != nil {
-		logger.L().Fatal("failed to initialize service discovery client", helpers.Error(err))
-		return
-	}
-
-	backendServices, err := servicediscovery.GetServices(sdClient)
-	if err != nil {
-		logger.L().Fatal("failed to get backend services", helpers.Error(err))
+		logger.L().Warning("failed to get backend services - skipping SaaS wiring", helpers.Error(err))
 		return
 	}
 
@@ -134,6 +152,27 @@ func initializeSaaSEnv() {
 		logger.L().Fatal("failed to initialize cloud api", helpers.Error(err))
 	} else {
 		getter.SetKSCloudAPIConnector(ksCloud)
+	}
+}
+
+// getServicesWithTimeout runs servicediscovery.GetServices in a goroutine and returns
+// an error if no response arrives within timeout. This guards against the default
+// http.Client (used inside ServiceDiscoveryClientV3) having no request deadline.
+func getServicesWithTimeout(g schema.IServiceDiscoveryServiceGetter, timeout time.Duration) (schema.IBackendServices, error) {
+	type result struct {
+		services schema.IBackendServices
+		err      error
+	}
+	ch := make(chan result, 1)
+	go func() {
+		s, err := servicediscovery.GetServices(g)
+		ch <- result{s, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.services, r.err
+	case <-time.After(timeout):
+		return nil, fmt.Errorf("service discovery timed out after %v", timeout)
 	}
 }
 
