@@ -1,6 +1,7 @@
 package cautils
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -259,15 +260,20 @@ func listFilesOrDirectories(pattern string, onlyDirectories bool) ([]string, []e
 	return paths, errs
 }
 
-func readYamlFile(yamlFile []byte) ([]workloadinterface.IMetadata, error) {
-	defer recover()
+func readYamlFile(yamlFile []byte) (yamlObjs []workloadinterface.IMetadata, _ error) {
+	yamlObjs = []workloadinterface.IMetadata{}
+	defer func() {
+		if r := recover(); r != nil {
+			logger.L().Warning(fmt.Sprintf("panic during YAML parsing: %v", r))
+		}
+	}()
 
-	r := bytes.NewReader(yamlFile)
-	dec := yaml.NewDecoder(r)
-	yamlObjs := []workloadinterface.IMetadata{}
-
-	var t interface{}
-	for dec.Decode(&t) == nil {
+	for i, doc := range splitYAMLDocuments(yamlFile) {
+		var t interface{}
+		if err := yaml.Unmarshal(doc, &t); err != nil {
+			logger.L().Warning(fmt.Sprintf("skipping malformed YAML document %d: %v", i+1, err))
+			continue
+		}
 		j := convertYamlToJson(t)
 		if j == nil {
 			continue
@@ -285,7 +291,43 @@ func readYamlFile(yamlFile []byte) ([]workloadinterface.IMetadata, error) {
 		}
 	}
 
-	return yamlObjs, nil
+	return
+}
+
+func splitYAMLDocuments(data []byte) [][]byte {
+	var docs [][]byte
+	var current bytes.Buffer
+
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	scanner.Buffer(make([]byte, bufio.MaxScanTokenSize), len(data)+1)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if isYAMLDocumentSeparator(line) {
+			if doc := bytes.TrimSpace(current.Bytes()); len(doc) > 0 {
+				docs = append(docs, append([]byte{}, doc...))
+			}
+			current.Reset()
+			continue
+		}
+		current.Write(line)
+		current.WriteByte('\n')
+	}
+	if err := scanner.Err(); err != nil {
+		logger.L().Warning(fmt.Sprintf("error scanning YAML input: %v", err))
+	}
+	if doc := bytes.TrimSpace(current.Bytes()); len(doc) > 0 {
+		docs = append(docs, append([]byte{}, doc...))
+	}
+	return docs
+}
+
+func isYAMLDocumentSeparator(line []byte) bool {
+	line = bytes.TrimRight(line, "\r")
+	if !bytes.HasPrefix(line, []byte("---")) {
+		return false
+	}
+	rest := bytes.TrimLeft(line[3:], " \t")
+	return len(rest) == 0 || rest[0] == '#'
 }
 
 func readJsonFile(jsonFile []byte) ([]workloadinterface.IMetadata, error) {
