@@ -31,6 +31,9 @@ const unixNewline = "\n"
 const oldMacNewline = "\r"
 
 func NewFixHandler(fixInfo *metav1.FixInfo) (*FixHandler, error) {
+	if info, err := os.Stat(fixInfo.ReportFile); err == nil && info.IsDir() {
+		return nil, fmt.Errorf("%q is a directory, not a file. Please provide a JSON report file path", fixInfo.ReportFile)
+	}
 	jsonFile, err := os.Open(fixInfo.ReportFile)
 	if err != nil {
 		return nil, err
