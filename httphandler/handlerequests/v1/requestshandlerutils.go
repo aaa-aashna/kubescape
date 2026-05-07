@@ -120,8 +120,12 @@ func readResultsFile(fileID string) (*reporthandlingv2.PostureReport, error) {
 }
 
 func removeResultDirs() {
-	os.ReadDir(OutputDir)
-	os.ReadDir(FailedOutputDir)
+	if err := os.RemoveAll(OutputDir); err != nil {
+		logger.L().Error("failed to remove output directory", helpers.String("path", OutputDir), helpers.Error(err))
+	}
+	if err := os.RemoveAll(FailedOutputDir); err != nil {
+		logger.L().Error("failed to remove failed output directory", helpers.String("path", FailedOutputDir), helpers.Error(err))
+	}
 }
 func removeResultsFile(fileID string) error {
 	if fileName := searchFile(fileID); fileName != "" {
