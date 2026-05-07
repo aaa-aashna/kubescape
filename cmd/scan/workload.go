@@ -63,7 +63,7 @@ func getWorkloadCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Comma
 					return err
 				}
 			}
-			if scanInfo.Format == "" {
+			if f := cmd.InheritedFlags().Lookup("format"); f != nil && f.Changed && scanInfo.Format == "" {
 				return fmt.Errorf("format cannot be empty, supported formats: pretty-printer, json, junit, prometheus, pdf, html, sarif")
 			}
 			if err := validateThresholdsOnly(scanInfo); err != nil {

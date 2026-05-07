@@ -48,7 +48,7 @@ func GetScanCommand(ks meta.IKubescape) *cobra.Command {
 					return err
 				}
 			}
-			if scanInfo.Format == "" {
+			if f := cmd.Flags().Lookup("format"); f != nil && f.Changed && scanInfo.Format == "" {
 				return fmt.Errorf("format cannot be empty, supported formats: pretty-printer, json, junit, prometheus, pdf, html, sarif")
 			}
 			requestedView := scanInfo.View
