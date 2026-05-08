@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -204,6 +205,9 @@ func downloadFileToString(url string, timeout time.Duration) (string, error) {
 
 func writeOutput(content string, outputFile string) error {
 	if outputFile != "" {
+		if err := os.MkdirAll(filepath.Dir(outputFile), 0755); err != nil {
+			return err
+		}
 		return os.WriteFile(outputFile, []byte(content), 0644)
 	}
 	fmt.Print(content)
