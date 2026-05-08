@@ -2,10 +2,13 @@ package vap
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -28,36 +31,68 @@ func TestIsValidK8sObjectName(t *testing.T) {
 		{name: "starts with digit", input: "123", wantErr: false},
 		{name: "contains multiple hyphens", input: "abc-def-ghi", wantErr: false},
 		{name: "hyphen in middle", input: "abc-def123", wantErr: false},
-		{name: "exactly 63 chars", input: strings.Repeat("a", 63), wantErr: false},
+		{name: "dots in middle", input: "abc.def", wantErr: false},
+		{name: "dots and hyphens mixed", input: "team.prod-v2", wantErr: false},
+		{name: "exactly 253 chars", input: strings.Repeat("a", 253), wantErr: false},
 		{name: "1 char", input: "x", wantErr: false},
 
 		// invalid - length
-		{name: "empty string", input: "", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
-		{name: "exceeds 63 chars", input: strings.Repeat("a", 64), wantErr: true, errMsg: "less than 63 characters"},
+		{name: "empty string", input: "", wantErr: true, errMsg: "RFC 1123 subdomain"},
+		{name: "exceeds 253 chars", input: strings.Repeat("a", 254), wantErr: true, errMsg: "no more than 253"},
 
-		// invalid - starts with hyphen
-		{name: "starts with hyphen", input: "-abc", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
-
-		// invalid - ends with hyphen
-		{name: "ends with hyphen", input: "abc-", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
+		// invalid - starts/ends with dot or hyphen
+		{name: "starts with hyphen", input: "-abc", wantErr: true, errMsg: "RFC 1123 subdomain"},
+		{name: "ends with hyphen", input: "abc-", wantErr: true, errMsg: "RFC 1123 subdomain"},
+		{name: "starts with dot", input: ".abc", wantErr: true, errMsg: "RFC 1123 subdomain"},
+		{name: "ends with dot", input: "abc.", wantErr: true, errMsg: "RFC 1123 subdomain"},
 
 		// invalid - uppercase
-		{name: "contains uppercase", input: "Abc", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
-		{name: "all uppercase", input: "ABC", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
+		{name: "contains uppercase", input: "Abc", wantErr: true, errMsg: "RFC 1123 subdomain"},
+		{name: "all uppercase", input: "ABC", wantErr: true, errMsg: "RFC 1123 subdomain"},
 
 		// invalid - special characters
-		{name: "contains underscore", input: "abc_def", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
-		{name: "contains space", input: "abc def", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
-		{name: "contains dot in middle (not allowed by regex)", input: "abc.def", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
-		{name: "contains at sign", input: "a@b", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
+		{name: "contains underscore", input: "abc_def", wantErr: true, errMsg: "RFC 1123 subdomain"},
+		{name: "contains space", input: "abc def", wantErr: true, errMsg: "RFC 1123 subdomain"},
+		{name: "contains at sign", input: "a@b", wantErr: true, errMsg: "RFC 1123 subdomain"},
 
 		// invalid - starts/ends with digit
-		{name: "starts with hyphen and digit", input: "-123abc", wantErr: true, errMsg: "should consist of lower case alphanumeric characters"},
+		{name: "starts with hyphen and digit", input: "-123abc", wantErr: true, errMsg: "RFC 1123 subdomain"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := isValidK8sObjectName(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestIsValidNamespace(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+		errMsg  string
+	}{
+		{name: "valid simple", input: "default", wantErr: false},
+		{name: "valid with hyphen", input: "kube-system", wantErr: false},
+		{name: "valid starts with digit", input: "0default", wantErr: false},
+		{name: "empty", input: "", wantErr: true, errMsg: "RFC 1123 label"},
+		{name: "exceeds 63 chars", input: strings.Repeat("a", 64), wantErr: true, errMsg: "no more than 63"},
+		{name: "contains dot", input: "team.prod", wantErr: true, errMsg: "must not contain dots"},
+		{name: "contains uppercase", input: "Default", wantErr: true, errMsg: "RFC 1123 label"},
+		{name: "starts with hyphen", input: "-default", wantErr: true, errMsg: "RFC 1123 label"},
+		{name: "ends with hyphen", input: "default-", wantErr: true, errMsg: "RFC 1123 label"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := isValidNamespace(tt.input)
 			if tt.wantErr {
 				require.Error(t, err)
 				assert.Contains(t, err.Error(), tt.errMsg)
@@ -76,7 +111,7 @@ func TestDownloadFileToString(t *testing.T) {
 		}))
 		defer server.Close()
 
-		result, err := downloadFileToString(server.URL)
+		result, err := downloadFileToString(server.URL, 0)
 		require.NoError(t, err)
 		assert.Equal(t, "hello world", result)
 	})
@@ -87,7 +122,7 @@ func TestDownloadFileToString(t *testing.T) {
 		}))
 		defer server.Close()
 
-		_, err := downloadFileToString(server.URL)
+		_, err := downloadFileToString(server.URL, 0)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to download file")
 	})
@@ -98,15 +133,14 @@ func TestDownloadFileToString(t *testing.T) {
 		}))
 		defer server.Close()
 
-		_, err := downloadFileToString(server.URL)
+		_, err := downloadFileToString(server.URL, 0)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to download file")
 		assert.Contains(t, err.Error(), "500")
 	})
 
 	t.Run("connection refused", func(t *testing.T) {
-		// Use an invalid URL to simulate connection refused
-		_, err := downloadFileToString("http://127.0.0.1:1/nonexistent")
+		_, err := downloadFileToString("http://127.0.0.1:1/nonexistent", 0)
 		require.Error(t, err)
 	})
 
@@ -116,7 +150,7 @@ func TestDownloadFileToString(t *testing.T) {
 		}))
 		defer server.Close()
 
-		result, err := downloadFileToString(server.URL)
+		result, err := downloadFileToString(server.URL, 0)
 		require.NoError(t, err)
 		assert.Empty(t, result)
 	})
@@ -166,13 +200,14 @@ func TestDeployLibrary(t *testing.T) {
 		}
 		defer func() { http.DefaultTransport = origTransport }()
 
-		content, err := deployLibrary()
+		// Capture stdout
+		content, err := deployLibrary(0)
 		require.NoError(t, err)
 
 		parts := strings.Split(content, "\n---\n")
 		require.Len(t, parts, 3)
-		assert.Contains(t, parts[0], "policy-config-content")
-		assert.Contains(t, parts[1], "basic-control-content")
+		assert.Equal(t, "policy-config-content", strings.TrimSpace(parts[0]))
+		assert.Equal(t, "basic-control-content", strings.TrimSpace(parts[1]))
 		assert.Contains(t, parts[2], "kubescape-policies-content")
 	})
 
@@ -193,7 +228,7 @@ func TestDeployLibrary(t *testing.T) {
 		}
 		defer func() { http.DefaultTransport = origTransport }()
 
-		_, err := deployLibrary()
+		_, err := deployLibrary(0)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to download file")
 	})
@@ -215,7 +250,7 @@ func TestDeployLibrary(t *testing.T) {
 		}
 		defer func() { http.DefaultTransport = origTransport }()
 
-		_, err := deployLibrary()
+		_, err := deployLibrary(0)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to download file")
 	})
@@ -237,7 +272,7 @@ func TestDeployLibrary(t *testing.T) {
 		}
 		defer func() { http.DefaultTransport = origTransport }()
 
-		_, err := deployLibrary()
+		_, err := deployLibrary(0)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to download file")
 	})
@@ -285,6 +320,17 @@ func TestCreatePolicyBinding(t *testing.T) {
 		require.NotNil(t, binding.Spec.MatchResources.ObjectSelector)
 		assert.Equal(t, map[string]string{"app": "nginx", "env": "prod"}, binding.Spec.MatchResources.ObjectSelector.MatchLabels)
 		assert.Equal(t, "Warn", string(binding.Spec.ValidationActions[0]))
+	})
+
+	t.Run("labels with whitespace are trimmed", func(t *testing.T) {
+		out, err := createPolicyBinding("my-binding", "c-0016", "Deny", "", nil, []string{"app = nginx"})
+		require.NoError(t, err)
+
+		var binding admissionv1.ValidatingAdmissionPolicyBinding
+		err = yaml.Unmarshal([]byte(out), &binding)
+		require.NoError(t, err)
+		require.NotNil(t, binding.Spec.MatchResources.ObjectSelector)
+		assert.Equal(t, map[string]string{"app": "nginx"}, binding.Spec.MatchResources.ObjectSelector.MatchLabels)
 	})
 
 	t.Run("with parameter reference", func(t *testing.T) {
@@ -397,6 +443,15 @@ func TestGetDeployLibraryCmd(t *testing.T) {
 	assert.Equal(t, "deploy-library", cmd.Use)
 	assert.Equal(t, "Install Kubescape CEL admission policy library", cmd.Short)
 	assert.NotNil(t, cmd.RunE)
+
+	// Check flags
+	outputFlag := cmd.Flags().Lookup("output")
+	require.NotNil(t, outputFlag)
+	assert.Equal(t, "o", outputFlag.Shorthand)
+
+	timeoutFlag := cmd.Flags().Lookup("timeout")
+	require.NotNil(t, timeoutFlag)
+	assert.Equal(t, "0s", timeoutFlag.DefValue)
 }
 
 func TestGetCreatePolicyBindingCmd(t *testing.T) {
@@ -442,8 +497,8 @@ func TestGetVapHelperCmd(t *testing.T) {
 }
 
 func TestLabelSelectorRegexEdgeCases(t *testing.T) {
-	validLabels := []string{"app=nginx", "env1=prod2", "App=Value", "appName=NginxValue"}
-	invalidLabels := []string{"key value", "key=", "=value", "key=val=extra", "app-name=nginx", "app.name=nginx", "app_name=nginx", "app@=nginx", "app=nginx@"}
+	validLabels := []string{"app=nginx", "env1=prod2", "App=Value", "appName=NginxValue", "app-name=nginx", "app.name=nginx", "app_name=nginx", "app.kubernetes.io/name=nginx", "key=", "app = nginx"}
+	invalidLabels := []string{"key value", "=value", "key=val=extra", "app@=nginx", "app=nginx@", "app!=nginx", "app", "app==nginx"}
 
 	for _, label := range validLabels {
 		t.Run("valid label "+label, func(t *testing.T) {
@@ -460,7 +515,7 @@ func TestLabelSelectorRegexEdgeCases(t *testing.T) {
 			cmd.SetArgs([]string{"--name", "my-binding", "--policy", "c-0016", "--label", label})
 			err := cmd.Execute()
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid label selector")
+			assert.True(t, strings.Contains(err.Error(), "invalid label selector") || strings.Contains(err.Error(), "only '=' equality"), "unexpected error: %v", err)
 		})
 	}
 }
@@ -505,4 +560,97 @@ func TestCreatePolicyBindingCmdRequiredFlags(t *testing.T) {
 	require.NotNil(t, annotations)
 	_, isRequired = annotations[cobra.BashCompOneRequiredFlag]
 	assert.True(t, isRequired, "policy flag should be marked as required")
+}
+
+func TestDeployLibraryCmdTimeoutFlag(t *testing.T) {
+	cmd := getDeployLibraryCmd()
+
+	t.Run("timeout flag is registered with default 0s", func(t *testing.T) {
+		timeoutFlag := cmd.Flags().Lookup("timeout")
+		require.NotNil(t, timeoutFlag)
+		assert.Equal(t, "0s", timeoutFlag.DefValue)
+	})
+
+	t.Run("timeout flag can be set via args", func(t *testing.T) {
+		cmd := getDeployLibraryCmd()
+		err := cmd.ParseFlags([]string{"--timeout", "30s"})
+		require.NoError(t, err)
+		got, err := cmd.Flags().GetDuration("timeout")
+		require.NoError(t, err)
+		assert.Equal(t, 30*time.Second, got)
+	})
+
+	t.Run("timeout flag accepts 0s shorthand", func(t *testing.T) {
+		cmd := getDeployLibraryCmd()
+		err := cmd.ParseFlags([]string{"--timeout", "0s"})
+		require.NoError(t, err)
+		got, err := cmd.Flags().GetDuration("timeout")
+		require.NoError(t, err)
+		assert.Equal(t, time.Duration(0), got)
+	})
+}
+
+func TestDownloadFileToStringTimeout(t *testing.T) {
+	t.Run("timeout 0 means no timeout", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "ok")
+		}))
+		defer server.Close()
+
+		result, err := downloadFileToString(server.URL, 0)
+		require.NoError(t, err)
+		assert.Equal(t, "ok", result)
+	})
+
+	t.Run("short timeout triggers on slow server", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			select {
+			case <-time.After(2 * time.Second):
+			case <-r.Context().Done():
+				return
+			}
+			fmt.Fprint(w, "too late")
+		}))
+		defer server.Close()
+
+		_, err := downloadFileToString(server.URL, 10*time.Millisecond)
+		require.Error(t, err)
+	})
+
+	t.Run("non-zero timeout works for fast server", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			fmt.Fprint(w, "fast")
+		}))
+		defer server.Close()
+
+		result, err := downloadFileToString(server.URL, 5*time.Second)
+		require.NoError(t, err)
+		assert.Equal(t, "fast", result)
+	})
+}
+
+// captureStdout captures stdout output from a function and returns it as a string.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+
+	outC := make(chan string)
+	go func() {
+		var buf strings.Builder
+		_, _ = io.Copy(&buf, r)
+		outC <- buf.String()
+	}()
+
+	fn()
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	return <-outC
 }
