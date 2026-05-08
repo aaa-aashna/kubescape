@@ -10,14 +10,14 @@ The best way to get started with Kubescape is to download it to the machine you 
 - [Run your first scan](#run-your-first-scan)
 - [Usage](#usage)
   - [Misconfigurations Scanning](#misconfigurations-scanning)
+    - [Output Formats](#output-formats)
+    - [Compliance Score](#compliance-score)
   - [Image Scanning](#image-scanning)
   - [Auto-Fix Misconfigurations](#auto-fix-misconfigurations)
   - [Image Patching](#image-patching)
   - [Validating Admission Policies (VAP)](#validating-admission-policies-vap)
   - [MCP Server (AI Integration)](#mcp-server-ai-integration)
   - [Configuration Management](#configuration-management)
-    - [Output Formats](#output-formats)
-    - [Compliance Score](#compliance-score)
 - [Offline/Air-gapped Support](#offlineair-gapped-environment-support)
 - [Other Ways to Use Kubescape](#other-ways-to-use-kubescape)
 - [Tutorial Videos](#tutorial-videos)
@@ -261,7 +261,7 @@ We offer two important metrics to assess compliance:
     kubescape scan framework <FRAMEWORK_NAME> --compliance-threshold <SCORE_VALUE[float32]>
     ```
 
-### Output formats
+### Output Formats
 
 #### JSON
 
