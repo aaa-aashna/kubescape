@@ -73,7 +73,7 @@ func GetDownloadCmd(ks meta.IKubescape) *cobra.Command {
 
 			downloadInfo.Target = args[0]
 			if len(args) >= 2 {
-				if args[1] == "" {
+				if args[1] == "" && (args[0] == "framework" || args[0] == "control") {
 					return fmt.Errorf("name cannot be empty for %s download", args[0])
 				}
 				downloadInfo.Identifier = args[1]
