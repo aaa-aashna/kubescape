@@ -258,7 +258,9 @@ func (c *ClusterConfig) GetContextName() string {
 func (c *ClusterConfig) ToMapString() map[string]interface{} {
 	m := map[string]interface{}{}
 	if bc, err := json.Marshal(c.configObj); err == nil {
-		json.Unmarshal(bc, &m)
+		if err := json.Unmarshal(bc, &m); err != nil {
+			logger.L().Error("failed to unmarshal config", helpers.Error(err))
+		}
 	}
 	return m
 }
@@ -496,6 +498,22 @@ func initializeCloudAPI(c ITenantConfig) *v1.KSCloudAPI {
 			logger.L().Debug("updating Access Key from config", helpers.Int("old (len)", len(ksCloud.GetAccessKey())), helpers.Int("new (len)", len(val)))
 			ksCloud.SetAccessKey(val)
 		}
+
+		// Back-propagate URLs from connector to configObj when configObj has no URL but connector does.
+		// This handles the API_URL-based live service discovery path where initializeSaaSEnv sets URLs
+		// on the global connector before any scan runs, but configObj.CloudReportURL is never populated
+		// (e.g. when running without services.json and without KS_CLOUD_REPORT_URL env var).
+		if co := c.GetConfigObj(); co != nil {
+			if co.CloudReportURL == "" && ksCloud.GetCloudReportURL() != "" {
+				logger.L().Debug("updating Cloud Report URL in config from connector", helpers.String("cloudReportURL", ksCloud.GetCloudReportURL()))
+				co.CloudReportURL = ksCloud.GetCloudReportURL()
+			}
+			if co.CloudAPIURL == "" && ksCloud.GetCloudAPIURL() != "" {
+				logger.L().Debug("updating Cloud API URL in config from connector", helpers.String("cloudAPIURL", ksCloud.GetCloudAPIURL()))
+				co.CloudAPIURL = ksCloud.GetCloudAPIURL()
+			}
+		}
+
 		getter.SetKSCloudAPIConnector(ksCloud)
 	} else {
 		logger.L().Debug("initializing KS Cloud API from config", helpers.String("accountID", c.GetAccountID()), helpers.String("cloudAPIURL", c.GetCloudAPIURL()), helpers.String("cloudReportURL", c.GetCloudReportURL()))

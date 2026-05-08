@@ -10,6 +10,8 @@ The best way to get started with Kubescape is to download it to the machine you 
 - [Run your first scan](#run-your-first-scan)
 - [Usage](#usage)
   - [Misconfigurations Scanning](#misconfigurations-scanning)
+    - [Output Formats](#output-formats)
+    - [Compliance Score](#compliance-score)
   - [Image Scanning](#image-scanning)
   - [Auto-Fix Misconfigurations](#auto-fix-misconfigurations)
   - [Image Patching](#image-patching)
@@ -259,20 +261,20 @@ We offer two important metrics to assess compliance:
     kubescape scan framework <FRAMEWORK_NAME> --compliance-threshold <SCORE_VALUE[float32]>
     ```
 
-### Output formats
+### Output Formats
 
-#### JSON:
+#### JSON
 
 ```bash
 kubescape scan --format json --output results.json
 ```
 
-#### junit XML: 
+#### JUnit XML
 
 ```bash
 kubescape scan --format junit --output results.xml
 ```
-#### SARIF: 
+#### SARIF
 
 SARIF is a standard format for the output of static analysis tools. It is supported by many tools, including GitHub Code Scanning and Azure DevOps. [Read more about SARIF](https://docs.github.com/en/code-security/secure-coding/sarif-support-for-code-scanning/about-sarif-support-for-code-scanning).
 
@@ -286,6 +288,12 @@ kubescape scan --format sarif --output results.sarif
 
 ```bash
 kubescape scan --format html --output results.html
+```
+
+#### PDF
+
+```bash
+kubescape scan --format pdf --output report.pdf
 ```
 
 ## Offline/air-gapped environment support

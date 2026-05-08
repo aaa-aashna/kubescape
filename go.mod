@@ -11,7 +11,7 @@ require (
 	github.com/anubhav06/copa-grype v1.0.3-alpha.1
 	github.com/armosec/armoapi-go v0.0.693
 	github.com/armosec/utils-go v0.0.58
-	github.com/armosec/utils-k8s-go v0.0.30
+	github.com/armosec/utils-k8s-go v0.0.35
 	github.com/briandowns/spinner v1.23.2
 	github.com/chainguard-dev/git-urls v1.0.2
 	github.com/containerd/platforms v1.0.0-rc.2
@@ -29,7 +29,7 @@ require (
 	github.com/johnfercher/maroto/v2 v2.2.2
 	github.com/json-iterator/go v1.1.12
 	github.com/jwalton/gchalk v1.3.0
-	github.com/kubescape/backend v0.0.20
+	github.com/kubescape/backend v0.0.40
 	github.com/kubescape/go-git-url v0.0.31
 	github.com/kubescape/go-logger v0.0.28
 	github.com/kubescape/k8s-interface v0.0.208
@@ -37,7 +37,7 @@ require (
 	github.com/kubescape/rbac-utils v0.0.21-0.20230806101615-07e36f555520
 	github.com/kubescape/regolibrary/v2 v2.0.1
 	github.com/kubescape/sizing-checker v0.0.0-20250323151332-73a18561dc73
-	github.com/kubescape/storage v0.0.184
+	github.com/kubescape/storage v0.0.258
 	github.com/mark3labs/mcp-go v0.29.0
 	github.com/maruel/natural v1.1.1
 	github.com/matthyx/go-gitlog v0.0.0-20231005131906-9ffabe3c5bcd
@@ -230,7 +230,7 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.18.2 // indirect
 	github.com/containerd/ttrpc v1.2.8 // indirect
 	github.com/containerd/typeurl/v2 v2.2.3 // indirect
-	github.com/containers/common v0.63.0 // indirect
+	github.com/containers/common v0.64.2 // indirect
 	github.com/coreos/go-oidc/v3 v3.17.0 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
 	github.com/cpuguy83/go-docker v0.3.0 // indirect
@@ -470,7 +470,7 @@ require (
 	github.com/sassoftware/go-rpmutils v0.4.0 // indirect
 	github.com/sassoftware/relic v7.2.1+incompatible // indirect
 	github.com/scylladb/go-set v1.0.3-0.20200225121959-cc7b2070d91e // indirect
-	github.com/seccomp/libseccomp-golang v0.10.0 // indirect
+	github.com/seccomp/libseccomp-golang v0.11.0 // indirect
 	github.com/secure-systems-lab/go-securesystemslib v0.10.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/shibumi/go-pathspec v1.3.0 // indirect
@@ -547,10 +547,10 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.68.0 // indirect
 	go.opentelemetry.io/contrib/processors/minsev v0.16.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.19.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.43.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc v1.40.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.43.0 // indirect
-	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.43.0 // indirect
+	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.40.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.43.0 // indirect
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.43.0 // indirect
 	go.opentelemetry.io/otel/log v0.19.0 // indirect
@@ -602,7 +602,7 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.40.1 // indirect
 	oras.land/oras-go/v2 v2.6.0 // indirect
-	sigs.k8s.io/controller-runtime v0.20.4 // indirect
+	sigs.k8s.io/controller-runtime v0.21.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/release-utils v0.12.4 // indirect

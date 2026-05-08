@@ -372,6 +372,6 @@ func TestGetScanCommand(t *testing.T) {
 	// Verify the command name and short description
 	assert.Equal(t, "scan", cmd.Use)
 	assert.Equal(t, "Scan a Kubernetes cluster or YAML files for image vulnerabilities and misconfigurations", cmd.Short)
-	assert.Equal(t, "The action you want to perform", cmd.Long)
+	assert.Equal(t, "Scan a Kubernetes cluster, YAML files, Helm charts, Kustomize directories, Git repositories, or container images for security misconfigurations and vulnerabilities.", cmd.Long)
 	assert.Equal(t, scanCmdExamples, cmd.Example)
 }

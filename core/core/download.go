@@ -100,7 +100,7 @@ func downloadArtifacts(ctx context.Context, downloadInfo *metav1.DownloadInfo) e
 func downloadConfigInputs(ctx context.Context, downloadInfo *metav1.DownloadInfo) error {
 	tenant := cautils.GetTenantConfig(downloadInfo.AccountID, downloadInfo.AccessKey, "", "", getKubernetesApi())
 
-	controlsInputsGetter := getConfigInputsGetter(ctx, downloadInfo.Identifier, tenant.GetAccountID(), nil)
+	controlsInputsGetter := getConfigInputsGetter(ctx, downloadInfo.Identifier, tenant.GetAccountID(), nil, false)
 	controlInputs, err := controlsInputsGetter.GetControlsInputs(tenant.GetContextName())
 	if err != nil {
 		return err

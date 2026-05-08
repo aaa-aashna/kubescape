@@ -209,7 +209,10 @@ func (handler *HTTPHandler) Results(w http.ResponseWriter, r *http.Request) {
 		logger.L().Info("deleting results", helpers.String("ID", resultsQueryParams.ScanID))
 
 		if resultsQueryParams.AllResults {
-			removeResultDirs()
+			if err := handler.state.removeAllIfIdle(removeResultDirs); err != nil {
+				handler.writeError(w, err, resultsQueryParams.ScanID)
+				return
+			}
 		} else {
 			removeResultsFile(resultsQueryParams.ScanID)
 		}

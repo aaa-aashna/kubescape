@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/kubescape/go-logger"
+	"github.com/kubescape/kubescape/v3/cmd/shared"
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/kubescape/v3/core/cautils/getter"
 	"github.com/kubescape/kubescape/v3/core/meta"
@@ -39,9 +40,22 @@ func GetScanCommand(ks meta.IKubescape) *cobra.Command {
 	scanCmd := &cobra.Command{
 		Use:     "scan",
 		Short:   "Scan a Kubernetes cluster or YAML files for image vulnerabilities and misconfigurations",
-		Long:    `The action you want to perform`,
+		Long:    `Scan a Kubernetes cluster, YAML files, Helm charts, Kustomize directories, Git repositories, or container images for security misconfigurations and vulnerabilities.`,
 		Example: scanCmdExamples,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if scanInfo.FailThresholdSeverity != "" {
+				if err := shared.ValidateSeverity(scanInfo.FailThresholdSeverity); err != nil {
+					return err
+				}
+			}
+			if f := cmd.Flags().Lookup("format"); f != nil && f.Changed && scanInfo.Format == "" {
+				return fmt.Errorf("format cannot be empty, supported formats: pretty-printer, json, junit, prometheus, pdf, html, sarif")
+			}
+			requestedView := scanInfo.View
+			if err := validateFrameworkScanInfo(&scanInfo); err != nil {
+				return err
+			}
+			scanInfo.View = requestedView
 			if scanInfo.View == string(cautils.SecurityViewType) {
 				setSecurityViewScanInfo(args, &scanInfo)
 
@@ -95,6 +109,22 @@ func GetScanCommand(ks meta.IKubescape) *cobra.Command {
 	scanCmd.PersistentFlags().BoolVarP(&scanInfo.UseDefaultMatchers, "use-default-matchers", "", true, "Use default matchers (true) or CPE matchers (false) for image scanning")
 	scanCmd.PersistentFlags().StringSliceVar(&scanInfo.LabelsToCopy, "labels-to-copy", nil, "Labels to copy from workloads to scan reports for easy identification. e.g: --labels-to-copy=app,team,environment")
 	scanCmd.PersistentFlags().StringVar(&scanInfo.ListingURL, "grype-db-url", "", "Grype vulnerability database URL")
+
+	// Helm value override flags. Mirror `helm install` so users can pass overrides through verbatim
+	// when scanning a Helm chart directory. Note: -f is already taken by --format, so --values is long-only.
+	//
+	// Flag-binding choices match upstream Helm (helm.sh/helm/v3 cmd/helm/flags.go) exactly:
+	//   --values     -> StringSliceVar : Helm splits on commas, so `--values a.yaml,b.yaml` is two files.
+	//   --set        -> StringArrayVar : verbatim; commas inside the value belong to the strvals parser
+	//                                    and must survive (e.g. `--set tolerations={a,b}`).
+	//   --set-string -> StringArrayVar : same reasoning as --set.
+	//   --set-file   -> StringArrayVar : same reasoning as --set.
+	scanCmd.PersistentFlags().StringSliceVar(&scanInfo.HelmValueFiles, "values", nil, "Specify Helm values in a YAML file or a URL when scanning a Helm chart (can specify multiple, or separate paths with commas)")
+	scanCmd.PersistentFlags().StringArrayVar(&scanInfo.HelmSetValues, "set", nil, "Set Helm values on the command line when scanning a Helm chart (can specify multiple, e.g. --set key1=val1 --set key2=val2)")
+	scanCmd.PersistentFlags().StringArrayVar(&scanInfo.HelmSetStringValues, "set-string", nil, "Set Helm STRING values on the command line when scanning a Helm chart (can specify multiple)")
+	scanCmd.PersistentFlags().StringArrayVar(&scanInfo.HelmSetFileValues, "set-file", nil, "Set Helm values from respective files specified via the command line (can specify multiple)")
+	scanCmd.PersistentFlags().StringVar(&scanInfo.HelmReleaseName, "release-name", "", "Helm release name made available as .Release.Name when rendering the chart")
+	scanCmd.PersistentFlags().StringVar(&scanInfo.HelmReleaseNamespace, "release-namespace", "", "Helm release namespace made available as .Release.Namespace when rendering the chart")
 
 	scanCmd.PersistentFlags().MarkDeprecated("fail-threshold", "use '--compliance-threshold' flag instead. Flag will be removed at 1.Dec.2023")
 	scanCmd.PersistentFlags().MarkDeprecated("create-account", "Create account is no longer supported. In case of a missing Account ID and a configured backend server, a new account id will be generated automatically by Kubescape. Feel free to contact the Kubescape maintainers for more information.")
