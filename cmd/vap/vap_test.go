@@ -456,7 +456,7 @@ func TestGetVapHelperCmd(t *testing.T) {
 
 func TestLabelSelectorRegexEdgeCases(t *testing.T) {
 	validLabels := []string{"app=nginx", "env1=prod2", "App=Value", "appName=NginxValue", "app-name=nginx", "app.name=nginx", "app_name=nginx", "app.kubernetes.io/name=nginx", "key="}
-	invalidLabels := []string{"key value", "=value", "key=val=extra", "app@=nginx", "app=nginx@"}
+	invalidLabels := []string{"key value", "=value", "key=val=extra", "app@=nginx", "app=nginx@", "app!=nginx", "app"}
 
 	for _, label := range validLabels {
 		t.Run("valid label "+label, func(t *testing.T) {
@@ -473,7 +473,7 @@ func TestLabelSelectorRegexEdgeCases(t *testing.T) {
 			cmd.SetArgs([]string{"--name", "my-binding", "--policy", "c-0016", "--label", label})
 			err := cmd.Execute()
 			require.Error(t, err)
-			assert.Contains(t, err.Error(), "invalid label selector")
+			assert.True(t, strings.Contains(err.Error(), "invalid label selector") || strings.Contains(err.Error(), "only '=' equality"), "unexpected error: %v", err)
 		})
 	}
 }

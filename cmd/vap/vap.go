@@ -16,6 +16,7 @@ import (
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/selection"
 	"sigs.k8s.io/yaml"
 )
 
@@ -96,8 +97,15 @@ func getCreatePolicyBindingCmd() *cobra.Command {
 				}
 			}
 			for _, label := range labelArr {
-				if _, err := labels.Parse(label); err != nil {
+				parsed, err := labels.Parse(label)
+				if err != nil {
 					return fmt.Errorf("invalid label selector: %s", label)
+				}
+				requirements, _ := parsed.Requirements()
+				for _, r := range requirements {
+					if r.Operator() != selection.Equals && r.Operator() != selection.DoubleEquals {
+						return fmt.Errorf("only '=' equality label selectors are supported: %s", label)
+					}
 				}
 			}
 			if action != "Deny" && action != "Audit" && action != "Warn" {
