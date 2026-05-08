@@ -92,7 +92,7 @@ func getCreatePolicyBindingCmd() *cobra.Command {
 				return fmt.Errorf("invalid policy name %s: %w", policyName, err)
 			}
 			for _, namespace := range namespaceArr {
-				if err := isValidK8sObjectName(namespace); err != nil {
+				if err := isValidNamespace(namespace); err != nil {
 					return fmt.Errorf("invalid namespace %s: %w", namespace, err)
 				}
 			}
@@ -226,6 +226,19 @@ func isValidK8sObjectName(name string) error {
 		return errors.New("name should consist of lower case alphanumeric characters, '-' or '.', and must start and end with an alphanumeric character")
 	}
 
+	return nil
+}
+
+func isValidNamespace(name string) error {
+	if len(name) > 63 {
+		return errors.New("namespace must be at most 63 characters")
+	}
+	if len(name) == 0 {
+		return errors.New("namespace must not be empty")
+	}
+	if !regexp.MustCompile(`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`).MatchString(name) {
+		return errors.New("namespace must consist of lower case alphanumeric characters or '-', and must start and end with an alphanumeric character")
+	}
 	return nil
 }
 

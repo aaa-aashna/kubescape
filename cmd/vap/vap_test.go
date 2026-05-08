@@ -72,6 +72,37 @@ func TestIsValidK8sObjectName(t *testing.T) {
 	}
 }
 
+func TestIsValidNamespace(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+		errMsg  string
+	}{
+		{name: "valid simple", input: "default", wantErr: false},
+		{name: "valid with hyphen", input: "kube-system", wantErr: false},
+		{name: "valid starts with digit", input: "0default", wantErr: false},
+		{name: "empty", input: "", wantErr: true, errMsg: "must not be empty"},
+		{name: "exceeds 63 chars", input: strings.Repeat("a", 64), wantErr: true, errMsg: "at most 63"},
+		{name: "contains dot", input: "team.prod", wantErr: true, errMsg: "must consist of lower case alphanumeric characters or '-'"},
+		{name: "contains uppercase", input: "Default", wantErr: true, errMsg: "must consist of lower case alphanumeric characters or '-'"},
+		{name: "starts with hyphen", input: "-default", wantErr: true, errMsg: "must consist of lower case alphanumeric characters or '-'"},
+		{name: "ends with hyphen", input: "default-", wantErr: true, errMsg: "must consist of lower case alphanumeric characters or '-'"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := isValidNamespace(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestDownloadFileToString(t *testing.T) {
 	t.Run("successful download", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
