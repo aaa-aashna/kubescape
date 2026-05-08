@@ -39,6 +39,8 @@ func CollectResources(ctx context.Context, rsrcHandler IResourceHandler, opaSess
 		return fmt.Errorf("no resources found to scan")
 	}
 
+	opaSessionObj.ScanCoverage = cautils.BuildScanCoverage(opaSessionObj.InfoMap, opaSessionObj.ResourceToControlsMap)
+
 	return nil
 }
 
