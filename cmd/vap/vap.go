@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	admissionv1 "k8s.io/api/admissionregistration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"sigs.k8s.io/yaml"
 )
 
@@ -95,8 +96,7 @@ func getCreatePolicyBindingCmd() *cobra.Command {
 				}
 			}
 			for _, label := range labelArr {
-				// Label selector must be in the format key=value
-				if !regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?=[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$`).MatchString(label) {
+				if _, err := labels.Parse(label); err != nil {
 					return fmt.Errorf("invalid label selector: %s", label)
 				}
 			}
