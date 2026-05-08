@@ -35,11 +35,15 @@ func CollectResources(ctx context.Context, rsrcHandler IResourceHandler, opaSess
 	opaSessionObj.ExternalResources = externalResources
 	opaSessionObj.ExcludedRules = excludedRulesMap
 
+	// Build coverage BEFORE the no-resources early return: in the exact case
+	// this diagnostic targets (severe RBAC restrictions where every pull
+	// fails), we still want failed-GVR / not-evaluated info preserved on the
+	// session even though the scan itself can't proceed.
+	opaSessionObj.ScanCoverage = cautils.BuildScanCoverage(opaSessionObj.InfoMap, opaSessionObj.ResourceToControlsMap)
+
 	if len(opaSessionObj.K8SResources) == 0 && len(opaSessionObj.ExternalResources) == 0 || len(opaSessionObj.AllResources) == 0 {
 		return fmt.Errorf("no resources found to scan")
 	}
-
-	opaSessionObj.ScanCoverage = cautils.BuildScanCoverage(opaSessionObj.InfoMap, opaSessionObj.ResourceToControlsMap)
 
 	return nil
 }
