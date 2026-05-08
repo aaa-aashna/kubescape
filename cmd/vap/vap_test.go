@@ -291,6 +291,17 @@ func TestCreatePolicyBinding(t *testing.T) {
 		assert.Equal(t, "Warn", string(binding.Spec.ValidationActions[0]))
 	})
 
+	t.Run("labels with whitespace are trimmed", func(t *testing.T) {
+		out, err := createPolicyBinding("my-binding", "c-0016", "Deny", "", nil, []string{"app = nginx"})
+		require.NoError(t, err)
+
+		var binding admissionv1.ValidatingAdmissionPolicyBinding
+		err = yaml.Unmarshal([]byte(out), &binding)
+		require.NoError(t, err)
+		require.NotNil(t, binding.Spec.MatchResources.ObjectSelector)
+		assert.Equal(t, map[string]string{"app": "nginx"}, binding.Spec.MatchResources.ObjectSelector.MatchLabels)
+	})
+
 	t.Run("with parameter reference", func(t *testing.T) {
 		out, err := createPolicyBinding("my-binding", "c-0016", "Deny", "my-params", nil, nil)
 		require.NoError(t, err)
@@ -455,7 +466,7 @@ func TestGetVapHelperCmd(t *testing.T) {
 }
 
 func TestLabelSelectorRegexEdgeCases(t *testing.T) {
-	validLabels := []string{"app=nginx", "env1=prod2", "App=Value", "appName=NginxValue", "app-name=nginx", "app.name=nginx", "app_name=nginx", "app.kubernetes.io/name=nginx", "key="}
+	validLabels := []string{"app=nginx", "env1=prod2", "App=Value", "appName=NginxValue", "app-name=nginx", "app.name=nginx", "app_name=nginx", "app.kubernetes.io/name=nginx", "key=", "app = nginx"}
 	invalidLabels := []string{"key value", "=value", "key=val=extra", "app@=nginx", "app=nginx@", "app!=nginx", "app", "app==nginx"}
 
 	for _, label := range validLabels {

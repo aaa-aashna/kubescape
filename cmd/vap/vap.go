@@ -254,8 +254,16 @@ func createPolicyBinding(bindingName string, policyName string, action string, p
 		policyBinding.Spec.MatchResources.ObjectSelector = &metav1.LabelSelector{}
 		policyBinding.Spec.MatchResources.ObjectSelector.MatchLabels = make(map[string]string)
 		for _, label := range labelMatch {
-			labelParts := regexp.MustCompile(`=`).Split(label, 2)
-			policyBinding.Spec.MatchResources.ObjectSelector.MatchLabels[labelParts[0]] = labelParts[1]
+			parsed, err := labels.Parse(label)
+			if err != nil {
+				continue
+			}
+			requirements, _ := parsed.Requirements()
+			for _, r := range requirements {
+				if len(r.Values().List()) > 0 {
+					policyBinding.Spec.MatchResources.ObjectSelector.MatchLabels[r.Key()] = r.Values().List()[0]
+				}
+			}
 		}
 	}
 
