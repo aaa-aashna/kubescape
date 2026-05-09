@@ -139,7 +139,7 @@ func ValidatePrinter(scanType cautils.ScanTypes, scanContext cautils.ScanningCon
 		case printer.JsonFormat, printer.PrettyFormat, printer.SARIFFormat:
 			return nil
 		default:
-			return fmt.Errorf("format \"%s\"is not supported for image scanning", printFormat)
+			return fmt.Errorf("format \"%s\" is not supported for image scanning", printFormat)
 		}
 	}
 
@@ -150,6 +150,15 @@ func ValidatePrinter(scanType cautils.ScanTypes, scanContext cautils.ScanningCon
 			return nil
 		default:
 			return fmt.Errorf("format \"%s\" is only supported when scanning local files", printFormat)
+		}
+	}
+
+	if scanType == cautils.ScanTypeCluster {
+		switch printFormat {
+		case printer.JsonFormat, printer.PrettyFormat, printer.HtmlFormat, printer.JunitResultFormat, printer.PrometheusFormat, printer.PdfFormat:
+			return nil
+		default:
+			return fmt.Errorf("format \"%s\" is not supported when scanning", printFormat)
 		}
 	}
 

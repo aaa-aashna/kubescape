@@ -116,7 +116,7 @@ func TestValidatePrinter(t *testing.T) {
 			name:      "junit format for image scan should return error",
 			scanType:  cautils.ScanTypeImage,
 			format:    printer.JunitResultFormat,
-			expectErr: errors.New("format \"junit\"is not supported for image scanning"),
+			expectErr: errors.New("format \"junit\" is not supported for image scanning"),
 		},
 		{
 			name:      "sarif format for image scan should not return error",
@@ -134,13 +134,13 @@ func TestValidatePrinter(t *testing.T) {
 			name:      "html format for image scan should return error",
 			scanType:  cautils.ScanTypeImage,
 			format:    printer.HtmlFormat,
-			expectErr: errors.New("format \"html\"is not supported for image scanning"),
+			expectErr: errors.New("format \"html\" is not supported for image scanning"),
 		},
 		{
 			name:      "prometheus format for image scan should return error",
 			scanType:  cautils.ScanTypeImage,
 			format:    printer.PrometheusFormat,
-			expectErr: errors.New("format \"prometheus\"is not supported for image scanning"),
+			expectErr: errors.New("format \"prometheus\" is not supported for image scanning"),
 		},
 		{
 			name:        "sarif format for cluster context should return error",
@@ -165,6 +165,24 @@ func TestValidatePrinter(t *testing.T) {
 			scanContext: cautils.ContextGitLocal,
 			format:      printer.SARIFFormat,
 			expectErr:   nil,
+		},
+		{
+			name:      "invalid format for cluster scan should return error",
+			scanType:  cautils.ScanTypeCluster,
+			format:    "invalid",
+			expectErr: errors.New("format \"invalid\" is not supported when scanning"),
+		},
+		{
+			name:      "pdf format for image scan should return error",
+			scanType:  cautils.ScanTypeImage,
+			format:    printer.PdfFormat,
+			expectErr: errors.New("format \"pdf\" is not supported for image scanning"),
+		},
+		{
+			name:      "pdf format for cluster scan should not return error",
+			scanType:  cautils.ScanTypeCluster,
+			format:    printer.PdfFormat,
+			expectErr: nil,
 		},
 	}
 
