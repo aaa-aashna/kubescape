@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"io/fs"
 	"path/filepath"
 	"strings"
 
@@ -144,20 +145,21 @@ func searchFile(fileID string) string {
 }
 
 func findFile(targetDir string, fileName string) (string, error) {
-	var files []string
-	err := filepath.Walk(targetDir, func(path string, info os.FileInfo, err error) error {
-		files = append(files, path)
+	var found string
+	err := filepath.WalkDir(targetDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil // skip inaccessible entries
+		}
+		if strings.Contains(path, fileName) {
+			found = path
+			return filepath.SkipAll
+		}
 		return nil
 	})
 	if err != nil {
 		return "", err
 	}
-	for i := range files {
-		if strings.Contains(files[i], fileName) {
-			return files[i], nil
-		}
-	}
-	return "", nil
+	return found, nil
 }
 
 func getScanCommand(scanRequest *utilsmetav1.PostScanRequest, scanID string) *cautils.ScanInfo {
