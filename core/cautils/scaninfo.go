@@ -224,10 +224,24 @@ func (scanInfo *ScanInfo) setUseFrom() {
 func (scanInfo *ScanInfo) Formats() []string {
 	formatString := scanInfo.Format
 	if formatString != "" {
-		return strings.Split(scanInfo.Format, ",")
+		return unique(strings.Split(scanInfo.Format, ","))
 	} else {
 		return []string{}
 	}
+}
+
+func unique(items []string) []string {
+	seen := map[string]bool{}
+	result := []string{}
+
+	for _, item := range items {
+		if !seen[item] {
+			seen[item] = true
+			result = append(result, item)
+		}
+	}
+
+	return result
 }
 
 func (scanInfo *ScanInfo) SetScanType(scanType ScanTypes) {
