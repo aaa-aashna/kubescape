@@ -222,7 +222,6 @@ func patchWithContext(ctx context.Context, buildkitAddr, image, reportFile, patc
 		return fmt.Errorf("copa: error reading source policy :: %w", err)
 	}
 
-	buildChannel := make(chan *client.SolveStatus)
 	_, err = bkClient.Build(ctx, solveOpt, copaProduct, func(ctx context.Context, c gwclient.Client) (*gwclient.Result, error) {
 		// Configure buildctl/client for use by package manager
 		config, err := buildkit.InitializeBuildkitConfig(ctx, c, image)
@@ -315,7 +314,7 @@ func patchWithContext(ctx context.Context, buildkitAddr, image, reportFile, patc
 			}
 		}
 		return res, nil
-	}, buildChannel)
+	}, nil)
 
 	return err
 }
