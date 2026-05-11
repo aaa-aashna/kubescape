@@ -18,7 +18,7 @@ func (m mockCounters) Failed() int   { return m.failed }
 func (m mockCounters) Skipped() int  { return m.skipped }
 func (m mockCounters) Passed() int   { return m.passed }
 func (m mockCounters) Excluded() int { return m.excluded }
-func (m mockCounters) All() int      { return m.failed + m.skipped + m.passed + m.excluded }
+func (m mockCounters) All() int      { return m.failed + m.skipped + m.passed }
 
 func TestControlCountersForSummary(t *testing.T) {
 	tests := []struct {
@@ -86,9 +86,9 @@ func TestControlCountersForSummary(t *testing.T) {
 			wantSkip:   "50",
 		},
 		{
-			name:       "with excluded — excluded counts toward All",
+			name:       "with excluded — excluded does not count toward All",
 			counters:   mockCounters{failed: 1, passed: 2, excluded: 3},
-			wantAll:    "6",
+			wantAll:    "3",
 			wantPassed: "2",
 			wantFailed: "1",
 			wantSkip:   "0",
