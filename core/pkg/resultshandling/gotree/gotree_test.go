@@ -235,7 +235,10 @@ func TestAddTree_MultipleSubtrees(t *testing.T) {
 	s2 := New("s2")
 	root.AddTree(s1)
 	root.AddTree(s2)
-	assert.Len(t, root.Items(), 2)
+	items := root.Items()
+	require.Len(t, items, 2)
+	assert.Equal(t, "s1", items[0].Text())
+	assert.Equal(t, "s2", items[1].Text())
 }
 
 func TestText(t *testing.T) {
@@ -303,6 +306,7 @@ func TestAddTree_PreservesSubtreeItems(t *testing.T) {
 	subtree.Add("a")
 	subtree.Add("b")
 	root.AddTree(subtree)
+	require.Len(t, root.Items(), 1)
 	require.Len(t, root.Items()[0].Items(), 2)
 	assert.Equal(t, "a", root.Items()[0].Items()[0].Text())
 	assert.Equal(t, "b", root.Items()[0].Items()[1].Text())
