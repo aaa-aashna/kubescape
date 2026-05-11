@@ -15,7 +15,7 @@ func (m *Mapping) GetOrCreate(value string) string {
 		return existing
 	}
 
-    pseudo := value + "-hidden"
+	pseudo := value + "-hidden"
 
 	m.data[value] = pseudo
 
