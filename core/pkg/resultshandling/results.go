@@ -136,8 +136,10 @@ func ValidatePrinter(scanType cautils.ScanTypes, scanContext cautils.ScanningCon
 	if scanType == cautils.ScanTypeImage {
 		// supported types for image scanning
 		switch printFormat {
-		case printer.JsonFormat, printer.PrettyFormat, printer.SARIFFormat:
+		case printer.JsonFormat, printer.SARIFFormat:
 			return false, nil
+		case printer.PrettyFormat:
+			return true, nil
 		default:
 			return false, fmt.Errorf("format \"%s\" is not supported for image scanning", printFormat)
 		}
@@ -153,14 +155,10 @@ func ValidatePrinter(scanType cautils.ScanTypes, scanContext cautils.ScanningCon
 		}
 	}
 
-	if scanType == cautils.ScanTypeCluster {
-		switch printFormat {
-		case printer.JsonFormat, printer.PrettyFormat, printer.HtmlFormat, printer.JunitResultFormat, printer.PrometheusFormat, printer.PdfFormat:
-			return false, nil
-		default:
-			return true, nil
-		}
+	switch printFormat {
+	case printer.JsonFormat, printer.HtmlFormat, printer.JunitResultFormat, printer.PrometheusFormat, printer.PdfFormat:
+		return false, nil
+	default:
+		return true, nil
 	}
-
-	return false, nil
 }

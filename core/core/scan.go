@@ -113,12 +113,12 @@ func GetOutputPrinters(scanInfo *cautils.ScanInfo, ctx context.Context, clusterN
 	containPrettyPrinter := false
 	outputPrinters := make([]printer.IPrinter, 0)
 	for _, format := range formats {
-		invalidPrinter, err := resultshandling.ValidatePrinter(scanInfo.ScanType, scanInfo.GetScanningContext(), format)
+		usesPrettyPrinter, err := resultshandling.ValidatePrinter(scanInfo.ScanType, scanInfo.GetScanningContext(), format)
 		if err != nil {
 			logger.L().Ctx(ctx).Fatal(err.Error())
 		}
 
-		if invalidPrinter && containPrettyPrinter {
+		if usesPrettyPrinter && containPrettyPrinter {
 			continue
 		}
 
@@ -126,7 +126,7 @@ func GetOutputPrinters(scanInfo *cautils.ScanInfo, ctx context.Context, clusterN
 		printerHandler.SetWriter(ctx, scanInfo.Output)
 		outputPrinters = append(outputPrinters, printerHandler)
 
-		if invalidPrinter {
+		if usesPrettyPrinter {
 			containPrettyPrinter = true
 		}
 	}
