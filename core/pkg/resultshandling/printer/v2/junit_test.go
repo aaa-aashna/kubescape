@@ -278,6 +278,11 @@ func TestBuildSkipMessage(t *testing.T) {
 			status:   &apis.StatusInfo{InnerStatus: apis.StatusSkipped, SubStatus: apis.SubStatusRequiresReview},
 			expected: "requires review",
 		},
+		{
+			name:     "empty subStatus with InnerInfo returns only InnerInfo",
+			status:   &apis.StatusInfo{InnerStatus: apis.StatusSkipped, SubStatus: "", InnerInfo: "some detail"},
+			expected: "some detail",
+		},
 	}
 
 	for _, tt := range tests {

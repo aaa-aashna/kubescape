@@ -231,9 +231,15 @@ func buildSkipMessage(status apis.IStatus) string {
 	if status == nil {
 		return ""
 	}
-	subStatus := string(status.GetSubStatus())
-	if si, ok := status.(*apis.StatusInfo); ok && si.InnerInfo != "" {
-		return fmt.Sprintf("%s: %s", subStatus, si.InnerInfo)
+	subStatus := strings.TrimSpace(string(status.GetSubStatus()))
+	if si, ok := status.(*apis.StatusInfo); ok {
+		info := strings.TrimSpace(si.InnerInfo)
+		if subStatus != "" && info != "" {
+			return fmt.Sprintf("%s: %s", subStatus, info)
+		}
+		if info != "" {
+			return info
+		}
 	}
 	return subStatus
 }
