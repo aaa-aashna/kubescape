@@ -114,12 +114,6 @@ func (opap *OPAProcessor) Process(ctx context.Context, policies *cautils.Policie
 		}
 
 		if len(resourcesAssociatedControl) == 0 {
-			// If this control is in the not-evaluated list (all its GVRs failed
-			// to pull), emit a synthetic skipped/notEvaluated result so it
-			// appears in the report rather than silently disappearing.
-			if opap.isNotEvaluated(control.ControlID) {
-				opap.emitNotEvaluatedControl(&control)
-			}
 			continue
 		}
 
@@ -551,37 +545,3 @@ func (opap *OPAProcessor) getCompiledRule(ctx context.Context, ruleName, ruleDat
 	return compiled, nil
 }
 
-// isNotEvaluated returns true when controlID appears in ScanCoverage.NotEvaluatedControls,
-// meaning every GVR the control depends on failed to pull.
-func (opap *OPAProcessor) isNotEvaluated(controlID string) bool {
-	for _, ne := range opap.ScanCoverage.NotEvaluatedControls {
-		if ne.ControlID == controlID {
-			return true
-		}
-	}
-	return false
-}
-
-// emitNotEvaluatedControl inserts a synthetic skipped/notEvaluated result for
-// control so it appears in the final report rather than disappearing silently.
-// The result is keyed by a well-known sentinel resource ID so downstream
-// formatters can identify and render it appropriately.
-func (opap *OPAProcessor) emitNotEvaluatedControl(control *reporthandling.Control) {
-	resourceID := "not-evaluated/" + control.ControlID
-	if _, ok := opap.ResourcesResult[resourceID]; !ok {
-		opap.ResourcesResult[resourceID] = resourcesresults.Result{ResourceID: resourceID}
-	}
-
-	controlResult := resourcesresults.ResourceAssociatedControl{}
-	controlResult.SetID(control.ControlID)
-	controlResult.SetName(control.Name)
-	controlResult.Status = apis.StatusInfo{
-		InnerStatus: apis.StatusSkipped,
-		SubStatus:   apis.SubStatusNotEvaluated,
-		InnerInfo:   string(apis.SubStatusNotEvaluatedInfo),
-	}
-
-	t := opap.ResourcesResult[resourceID]
-	t.AssociatedControls = append(t.AssociatedControls, controlResult)
-	opap.ResourcesResult[resourceID] = t
-}

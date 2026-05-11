@@ -385,7 +385,11 @@ func recordFailedQueryStatuses(failedQueries map[string]queryFailure, k8sResourc
 		if len(k8sResources[f.gvr]) > 0 {
 			continue
 		}
-		cautils.SetInfoMapForResources(f.err.Error(), []string{f.gvr}, infoMap)
+		infoMap[f.gvr] = apis.StatusInfo{
+			InnerInfo:   f.err.Error(),
+			InnerStatus: apis.StatusSkipped,
+			SubStatus:   apis.SubStatusNotEvaluated,
+		}
 	}
 }
 
