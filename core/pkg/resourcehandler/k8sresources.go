@@ -89,6 +89,11 @@ func (k8sHandler *K8sResourceHandler) GetResources(ctx context.Context, sessionO
 
 	// pull k8s resources
 	k8sResourcesMap, allResources, failedQueries := k8sHandler.pullResources(queryableResources, globalFieldSelectors)
+
+	// Record failed GVR statuses before any early return so BuildScanCoverage
+	// has data even when every pull fails (severe RBAC restrictions).
+	recordFailedQueryStatuses(failedQueries, k8sResourcesMap, sessionObj.InfoMap)
+
 	if len(allResources) == 0 && len(failedQueries) > 0 {
 		// Every query failed — nothing was collected; treat as fatal.
 		var combined []string
@@ -102,7 +107,6 @@ func (k8sHandler *K8sResourceHandler) GetResources(ctx context.Context, sessionO
 		logger.L().Ctx(ctx).Warning("failed to pull resource type",
 			helpers.String("gvr", f.gvr), helpers.Error(f.err))
 	}
-	recordFailedQueryStatuses(failedQueries, k8sResourcesMap, sessionObj.InfoMap)
 
 	// add single resource to k8s resources map (for single resource scan)
 	if !scanInfo.IsDeletedScanObject {
