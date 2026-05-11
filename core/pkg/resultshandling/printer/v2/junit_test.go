@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/kubescape/kubescape/v3/core/cautils"
+	"github.com/kubescape/opa-utils/reporthandling/apis"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -237,6 +238,52 @@ func TestSetWriter_Junit(t *testing.T) {
 
 			jp.SetWriter(ctx, tt.outputFile)
 			assert.Equal(t, tt.expected, jp.writer.Name())
+		})
+	}
+}
+
+func TestBuildSkipMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		status   apis.IStatus
+		expected string
+	}{
+		{
+			name:     "nil status returns empty string",
+			status:   nil,
+			expected: "",
+		},
+		{
+			name:     "configuration substatus with InnerInfo",
+			status:   &apis.StatusInfo{InnerStatus: apis.StatusSkipped, SubStatus: apis.SubStatusConfiguration, InnerInfo: "control not configured"},
+			expected: "configuration: control not configured",
+		},
+		{
+			name:     "irrelevant substatus no InnerInfo",
+			status:   &apis.StatusInfo{InnerStatus: apis.StatusSkipped, SubStatus: apis.SubStatusIrrelevant},
+			expected: "irrelevant",
+		},
+		{
+			name:     "manual review substatus with InnerInfo",
+			status:   &apis.StatusInfo{InnerStatus: apis.StatusSkipped, SubStatus: apis.SubStatusManualReview, InnerInfo: "requires manual check"},
+			expected: "manual review: requires manual check",
+		},
+		{
+			name:     "notEvaluated substatus with InnerInfo",
+			status:   &apis.StatusInfo{InnerStatus: apis.StatusSkipped, SubStatus: apis.SubStatusNotEvaluated, InnerInfo: "not evaluated"},
+			expected: "notEvaluated: not evaluated",
+		},
+		{
+			name:     "requires review substatus no InnerInfo",
+			status:   &apis.StatusInfo{InnerStatus: apis.StatusSkipped, SubStatus: apis.SubStatusRequiresReview},
+			expected: "requires review",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildSkipMessage(tt.status)
+			assert.Equal(t, tt.expected, got)
 		})
 	}
 }
