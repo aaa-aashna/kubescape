@@ -90,6 +90,23 @@ func anonymizeSession(session *cautils.OPASessionObj, mapping *Mapping) {
 		newResourceAttackTracks[newID] = attackTrack
 	}
 	session.ResourceAttackTracks = newResourceAttackTracks
+	if session.Report != nil {
+		for controlID, control := range session.Report.SummaryDetails.Controls {
+			remappedResourceIDs := control.ResourceIDs
+
+			for oldID, status := range control.ResourceIDs.All() {
+				newID := resolveMappedID(mapping, idMapping, oldID, "ref")
+
+				if oldID != newID {
+					delete(remappedResourceIDs.All(), oldID)
+					remappedResourceIDs.Append(status, newID)
+				}
+			}
+
+			control.ResourceIDs = remappedResourceIDs
+			session.Report.SummaryDetails.Controls[controlID] = control
+		}
+	}
 }
 
 func resolveMappedID(mapping *Mapping, idMapping map[string]string, originalID, prefix string) string {
