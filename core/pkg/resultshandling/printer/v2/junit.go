@@ -158,14 +158,21 @@ func iso8601Timestamp(t time.Time) string {
 	return t.UTC().Format("2006-01-02T15:04:05Z")
 }
 
-func testsSuites(results *cautils.OPASessionObj) *JUnitTestSuites {
-	suites := listTestsSuite(results)
-	var tests, failures, errs int
+// aggregateSuiteCounts sums the Tests/Failures/Errors counters across child
+// testsuites. Extracted so the aggregation can be unit-tested directly,
+// independent of the production code path (which never populates child Errors).
+func aggregateSuiteCounts(suites []JUnitTestSuite) (tests, failures, errors int) {
 	for _, s := range suites {
 		tests += s.Tests
 		failures += s.Failures
-		errs += s.Errors
+		errors += s.Errors
 	}
+	return
+}
+
+func testsSuites(results *cautils.OPASessionObj) *JUnitTestSuites {
+	suites := listTestsSuite(results)
+	tests, failures, errs := aggregateSuiteCounts(suites)
 	return &JUnitTestSuites{
 		Suites:   suites,
 		Tests:    tests,
