@@ -161,8 +161,19 @@ func (handler *HTTPHandler) Results(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.L().Info("requesting results", helpers.String("scanID", resultsQueryParams.ScanID), helpers.String("api", "v1/results"), helpers.String("method", r.Method))
 
+	isLatestFallback := false
 	if resultsQueryParams.ScanID == "" {
-		resultsQueryParams.ScanID = handler.state.getLatestID()
+		if handler.offline {
+			resultsQueryParams.ScanID = handler.state.getLatestID()
+			isLatestFallback = true
+		} else {
+			logger.L().Info("empty scan ID")
+			w.WriteHeader(http.StatusBadRequest)
+			response.Response = "scan ID is required"
+			response.Type = utilsapisv1.ErrorScanResponseType
+			w.Write(responseToBytes(&response))
+			return
+		}
 	}
 
 	if resultsQueryParams.ScanID == "" { // if no scan found
@@ -199,8 +210,12 @@ func (handler *HTTPHandler) Results(w http.ResponseWriter, r *http.Request) {
 			response.Response = res
 
 			if !resultsQueryParams.KeepResults {
-				logger.L().Info("deleting results", helpers.String("ID", resultsQueryParams.ScanID))
-				defer removeResultsFile(resultsQueryParams.ScanID)
+				if isLatestFallback {
+					logger.L().Info("keeping results for latest scan fallback to prevent unintended deletion", helpers.String("ID", resultsQueryParams.ScanID))
+				} else {
+					logger.L().Info("deleting results", helpers.String("ID", resultsQueryParams.ScanID))
+					defer removeResultsFile(resultsQueryParams.ScanID)
+				}
 			}
 
 		}
@@ -214,6 +229,10 @@ func (handler *HTTPHandler) Results(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else {
+			if isLatestFallback {
+				handler.writeError(w, fmt.Errorf("scan ID must be provided for deletion"), resultsQueryParams.ScanID)
+				return
+			}
 			removeResultsFile(resultsQueryParams.ScanID)
 		}
 		w.WriteHeader(http.StatusOK)
