@@ -216,13 +216,32 @@ func testsCases(results *cautils.OPASessionObj, controls reportsummary.IControls
 			testCase.Failure = &testCaseFailure
 		} else if control.GetStatus().IsSkipped() {
 			testCase.SkipMessage = &JUnitSkipMessage{
-				Message: "", // TODO - fill after statusInfo is supported
+				Message: buildSkipMessage(control.GetStatus()),
 			}
 
 		}
 		testCases = append(testCases, testCase)
 	}
 	return testCases
+}
+
+// buildSkipMessage constructs a human-readable skip reason from StatusInfo.
+// It uses SubStatus (e.g. "configuration", "irrelevant") and appends InnerInfo when available.
+func buildSkipMessage(status apis.IStatus) string {
+	if status == nil {
+		return ""
+	}
+	subStatus := strings.TrimSpace(string(status.GetSubStatus()))
+	if si, ok := status.(*apis.StatusInfo); ok {
+		info := strings.TrimSpace(si.InnerInfo)
+		if subStatus != "" && info != "" {
+			return fmt.Sprintf("%s: %s", subStatus, info)
+		}
+		if info != "" {
+			return info
+		}
+	}
+	return subStatus
 }
 
 func resourceToString(resource workloadinterface.IMetadata, sourcePath string) string {
