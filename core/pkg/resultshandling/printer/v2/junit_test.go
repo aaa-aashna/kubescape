@@ -15,6 +15,7 @@ import (
 
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/opa-utils/reporthandling/apis"
+	"github.com/kubescape/opa-utils/reporthandling/results/v1/reportsummary"
 	reporthandlingv2 "github.com/kubescape/opa-utils/reporthandling/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -346,7 +347,13 @@ func TestJunitOutputInvariants(t *testing.T) {
 	require.NoError(t, dec.Decode(&got.TestSuites), "output must round-trip through encoding/xml")
 	require.NotEmpty(t, got.TestSuites.Suites, "expected at least one <testsuite>")
 
-	// 4a — Σ(children) == parent for tests, failures, errors.
+	// 4a — Σ(children) == parent for tests, failures, errors. This is a
+	// structural invariant any conformant JUnit document must satisfy; on the
+	// single-framework fixture used here it is trivially true even under the
+	// pre-fix code, so the *regression* of the deduplicated-parent bug is
+	// covered by TestJunitMultiFrameworkSharedControl below, which fabricates
+	// two frameworks sharing a control and asserts parent counts are derived
+	// from the child suites rather than SummaryDetails.NumberOfControls().
 	var sumTests, sumFailures, sumErrors int
 	for _, s := range got.TestSuites.Suites {
 		sumTests += s.Tests
@@ -452,4 +459,80 @@ func TestIso8601Timestamp(t *testing.T) {
 	got := iso8601Timestamp(time.Time{})
 	_, err := time.Parse("2006-01-02T15:04:05Z", got)
 	assert.NoError(t, err, "zero time must fall back to a valid ISO 8601 timestamp, got %q", got)
+}
+
+// TestJunitMultiFrameworkSharedControl directly targets the issue #2099/4a
+// regression: when 2+ frameworks share a control, the parent <testsuites>
+// totals must equal Σ(children), not the deduplicated control count.
+//
+// The single-framework fixture used elsewhere cannot exercise this because the
+// deduplicated SummaryDetails count and the per-framework count happen to be
+// equal. Here we build a synthetic posture with two frameworks that both
+// reference the same failed control, then assert:
+//
+//   - Σ child Tests == 2 (each framework contributes one testcase)
+//   - parent.Tests == Σ child Tests (would be 1 under the old, regressed code)
+//   - parent.Tests != SummaryDetails.NumberOfControls().All() (would be 1)
+//
+// If testsSuites ever regresses to sourcing parent counts from
+// SummaryDetails.NumberOfControls() this test fails.
+func TestJunitMultiFrameworkSharedControl(t *testing.T) {
+	sharedID := "C-9999"
+	failed := apis.StatusInfo{InnerStatus: apis.StatusFailed}
+	sharedCtrl := reportsummary.ControlSummary{
+		ControlID:  sharedID,
+		Name:       "Shared failing control",
+		StatusInfo: failed,
+		Status:     apis.StatusFailed,
+	}
+
+	session := cautils.NewOPASessionObjMock()
+	session.Report = &reporthandlingv2.PostureReport{
+		SummaryDetails: reportsummary.SummaryDetails{
+			// Top-level Controls map is deduplicated — the shared control
+			// appears here exactly once. SummaryDetails.NumberOfControls().All()
+			// will therefore return 1.
+			Controls: reportsummary.ControlSummaries{sharedID: sharedCtrl},
+			Frameworks: []reportsummary.FrameworkSummary{
+				{
+					Name:     "F1",
+					Controls: reportsummary.ControlSummaries{sharedID: sharedCtrl},
+				},
+				{
+					Name:     "F2",
+					Controls: reportsummary.ControlSummaries{sharedID: sharedCtrl},
+				},
+			},
+		},
+	}
+
+	// Sanity-check the assumption that drives the regression: the
+	// deduplicated parent counter and Σ(per-framework counters) disagree.
+	require.Equal(t, 1, session.Report.SummaryDetails.NumberOfControls().All(),
+		"precondition: dedup'd SummaryDetails counts the shared control once")
+	require.Equal(t, 2,
+		session.Report.SummaryDetails.Frameworks[0].NumberOfControls().All()+
+			session.Report.SummaryDetails.Frameworks[1].NumberOfControls().All(),
+		"precondition: per-framework counts double-count the shared control")
+
+	suites := testsSuites(session)
+
+	// Σ(children) must equal 2 — each framework yields a <testsuite> with one
+	// <testcase>. This is the value parsers will see when summing children.
+	var sumTests, sumFailures int
+	for _, s := range suites.Suites {
+		sumTests += s.Tests
+		sumFailures += s.Failures
+	}
+	require.Equal(t, 2, sumTests, "Σ child tests should be 2 across the two frameworks")
+	require.Equal(t, 2, sumFailures, "Σ child failures should be 2 across the two frameworks")
+
+	// The fix: parent equals Σ(children). The regression: parent would equal
+	// SummaryDetails.NumberOfControls().All() == 1.
+	assert.Equal(t, sumTests, suites.Tests,
+		"parent Tests must equal Σ child Tests (regressed code returns 1)")
+	assert.Equal(t, sumFailures, suites.Failures,
+		"parent Failures must equal Σ child Failures (regressed code returns 1)")
+	assert.NotEqual(t, session.Report.SummaryDetails.NumberOfControls().All(), suites.Tests,
+		"parent Tests must NOT be the deduplicated SummaryDetails count")
 }
