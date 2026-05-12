@@ -39,7 +39,7 @@ func TestGetViewCmd_Args(t *testing.T) {
 	assert.Equal(t, "", downloadCmd.Long)
 	assert.Equal(t, downloadExample, downloadCmd.Example)
 
-	err := downloadCmd.RunE(&cobra.Command{}, []string{"config"})
+	err := downloadCmd.RunE(&cobra.Command{}, []string{"artifacts"})
 	assert.Nil(t, err)
 
 	err = downloadCmd.Args(&cobra.Command{}, []string{})
