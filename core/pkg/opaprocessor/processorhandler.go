@@ -544,3 +544,4 @@ func (opap *OPAProcessor) getCompiledRule(ctx context.Context, ruleName, ruleDat
 	opap.compiledModules[cacheKey] = compiled
 	return compiled, nil
 }
+
