@@ -495,7 +495,7 @@ func (k8sHandler *K8sResourceHandler) collectRbacResources(allResources map[stri
 }
 
 func (k8sHandler *K8sResourceHandler) pullWorkerNodesNumber() (int, error) {
-	nodesList, err := k8sHandler.k8s.KubernetesClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	nodesList, err := k8sHandler.k8s.KubernetesClient.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
 	scheduableNodes := v1.NodeList{}
 	if nodesList != nil {
 		for _, node := range nodesList.Items {

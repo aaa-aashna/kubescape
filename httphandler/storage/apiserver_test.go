@@ -87,7 +87,7 @@ func Test_getControlsMapFromResult(t *testing.T) {
 		},
 	}
 
-	actual := getControlsMapFromResult(context.TODO(), &scanResult, controlSummaries)
+	actual := getControlsMapFromResult(context.Background(), &scanResult, controlSummaries)
 	assert.Len(t, actual, len(scanResult.AssociatedControls))
 }
 
