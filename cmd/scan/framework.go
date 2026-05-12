@@ -236,6 +236,9 @@ func validateFrameworkScanInfo(scanInfo *cautils.ScanInfo) error {
 	if 100 < scanInfo.FailThreshold || 0 > scanInfo.FailThreshold {
 		return ErrBadThreshold
 	}
+	if 100 < scanInfo.FailCoverageThreshold || 0 > scanInfo.FailCoverageThreshold {
+		return ErrBadThreshold
+	}
 	if scanInfo.Submit && scanInfo.OmitRawResources {
 		return ErrOmitRawResourcesOrSubmit
 	}
@@ -257,6 +260,9 @@ func validateThresholdsOnly(scanInfo *cautils.ScanInfo) error {
 		return ErrBadThreshold
 	}
 	if 100 < scanInfo.FailThreshold || 0 > scanInfo.FailThreshold {
+		return ErrBadThreshold
+	}
+	if 100 < scanInfo.FailCoverageThreshold || 0 > scanInfo.FailCoverageThreshold {
 		return ErrBadThreshold
 	}
 	return nil

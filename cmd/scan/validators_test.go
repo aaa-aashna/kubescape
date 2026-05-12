@@ -97,6 +97,29 @@ func Test_validateFrameworkScanInfo(t *testing.T) {
 	}
 }
 
+func Test_validateCoverageThreshold(t *testing.T) {
+	testCases := []struct {
+		Description string
+		ScanInfo    *cautils.ScanInfo
+		Want        error
+	}{
+		{"0 disables the check and is valid", &cautils.ScanInfo{FailCoverageThreshold: 0}, nil},
+		{"50 is a valid threshold", &cautils.ScanInfo{FailCoverageThreshold: 50}, nil},
+		{"100 is a valid threshold", &cautils.ScanInfo{FailCoverageThreshold: 100}, nil},
+		{"101 is out of range", &cautils.ScanInfo{FailCoverageThreshold: 101}, ErrBadThreshold},
+		{"negative value is out of range", &cautils.ScanInfo{FailCoverageThreshold: -1}, ErrBadThreshold},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.Description, func(t *testing.T) {
+			got := validateThresholdsOnly(tc.ScanInfo)
+			if got != tc.Want {
+				t.Errorf("got: %v, want: %v", got, tc.Want)
+			}
+		})
+	}
+}
+
 func Test_validateWorkloadIdentifier(t *testing.T) {
 	testCases := []struct {
 		Description string
