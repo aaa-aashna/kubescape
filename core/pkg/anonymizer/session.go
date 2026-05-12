@@ -4,6 +4,7 @@ import (
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/opa-utils/reporthandling"
+	"github.com/kubescape/opa-utils/reporthandling/apis"
 	"github.com/kubescape/opa-utils/reporthandling/attacktrack/v1alpha1"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/prioritization"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/resourcesresults"
@@ -94,13 +95,16 @@ func anonymizeSession(session *cautils.OPASessionObj, mapping *Mapping) {
 		for controlID, control := range session.Report.SummaryDetails.Controls {
 			remappedResourceIDs := control.ResourceIDs
 
-			for oldID, status := range control.ResourceIDs.All() {
-				newID := resolveMappedID(mapping, idMapping, oldID, "ref")
+			originalResourceIDs := make(map[string]apis.ScanningStatus, len(control.ResourceIDs.All()))
+			for resourceID, status := range control.ResourceIDs.All() {
+				originalResourceIDs[resourceID] = status
+			}
 
-				if oldID != newID {
-					delete(remappedResourceIDs.All(), oldID)
-					remappedResourceIDs.Append(status, newID)
-				}
+			remappedResourceIDs.Clear()
+
+			for oldID, status := range originalResourceIDs {
+				newID := resolveMappedID(mapping, idMapping, oldID, "ref")
+				remappedResourceIDs.Append(status, newID)
 			}
 
 			control.ResourceIDs = remappedResourceIDs
