@@ -12,6 +12,7 @@ import (
 	"github.com/kubescape/k8s-interface/workloadinterface"
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/kubescape/v3/core/cautils/getter"
+	"github.com/kubescape/kubescape/v3/core/pkg/anonymizer"
 	"github.com/kubescape/kubescape/v3/core/pkg/hostsensorutils"
 	"github.com/kubescape/kubescape/v3/core/pkg/opaprocessor"
 	"github.com/kubescape/kubescape/v3/core/pkg/policyhandler"
@@ -228,9 +229,12 @@ func (ks *Kubescape) Scan(scanInfo *cautils.ScanInfo) (*resultshandling.ResultsH
 	// ========================= results handling =====================
 	resultsHandling.SetData(scanData)
 
-	// if resultsHandling.GetRiskScore() > float32(scanInfo.FailThreshold) {
-	// 	return resultsHandling, fmt.Errorf("scan risk-score %.2f is above permitted threshold %.2f", resultsHandling.GetRiskScore(), scanInfo.FailThreshold)
-	// }
+	if scanInfo.Hide {
+		/* logger.L().Info("anonymizer hook triggered")  //used for debuging pipeline right now will be removed in suceeding phase */
+		if err := anonymizer.Apply(resultsHandling); err != nil {
+			logger.L().Warning("failed to hide sensitive fields", helpers.Error(err))
+		}
+	}
 
 	return resultsHandling, nil
 }
