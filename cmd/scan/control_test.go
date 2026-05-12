@@ -64,9 +64,9 @@ func TestGetControlCmdWithNonExistentControl(t *testing.T) {
 func TestControlCmdHasCoverageFlag(t *testing.T) {
 	scanInfo := cautils.ScanInfo{}
 	scanCmd := GetScanCommand(&mocks.MockIKubescape{})
-	// add control as a subcommand the same way the real CLI does
-	scanCmd.AddCommand(getControlCmd(&mocks.MockIKubescape{}, &scanInfo))
+	controlCmd := getControlCmd(&mocks.MockIKubescape{}, &scanInfo)
+	scanCmd.AddCommand(controlCmd)
 
-	flag := scanCmd.PersistentFlags().Lookup("fail-coverage-below")
+	flag := controlCmd.InheritedFlags().Lookup("fail-coverage-below")
 	assert.NotNil(t, flag, "scan control should inherit --fail-coverage-below from scan persistent flags")
 }
