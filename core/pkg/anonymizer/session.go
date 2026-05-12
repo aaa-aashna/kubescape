@@ -34,60 +34,68 @@ func anonymizeSession(session *cautils.OPASessionObj, mapping *Mapping) {
 
 	newResourcesResult := make(map[string]resourcesresults.Result, len(session.ResourcesResult))
 	for oldID, result := range session.ResourcesResult {
-		if newID, ok := idMapping[oldID]; ok {
-			result.ResourceID = newID
+		newID := resolveMappedID(mapping, idMapping, oldID, "ref")
+		result.ResourceID = newID
 
-			if result.PrioritizedResource != nil {
-				result.PrioritizedResource.ResourceID = newID
-			}
+		if result.PrioritizedResource != nil {
+			result.PrioritizedResource.ResourceID = newID
+		}
 
-			for controlIndex := range result.AssociatedControls {
-				for ruleIndex := range result.AssociatedControls[controlIndex].ResourceAssociatedRules {
-					rule := &result.AssociatedControls[controlIndex].ResourceAssociatedRules[ruleIndex]
+		for controlIndex := range result.AssociatedControls {
+			for ruleIndex := range result.AssociatedControls[controlIndex].ResourceAssociatedRules {
+				rule := &result.AssociatedControls[controlIndex].ResourceAssociatedRules[ruleIndex]
 
-					for pathIndex := range rule.Paths {
-						oldPathID := rule.Paths[pathIndex].ResourceID
-						if mappedPathID, exists := idMapping[oldPathID]; exists {
-							rule.Paths[pathIndex].ResourceID = mappedPathID
-						}
-					}
+				for pathIndex := range rule.Paths {
+					rule.Paths[pathIndex].ResourceID = resolveMappedID(
+						mapping,
+						idMapping,
+						rule.Paths[pathIndex].ResourceID,
+						"ref",
+					)
+				}
 
-					for relatedIndex := range rule.RelatedResourcesIDs {
-						oldRelatedID := rule.RelatedResourcesIDs[relatedIndex]
-						if mappedRelatedID, exists := idMapping[oldRelatedID]; exists {
-							rule.RelatedResourcesIDs[relatedIndex] = mappedRelatedID
-						}
-					}
+				for relatedIndex := range rule.RelatedResourcesIDs {
+					rule.RelatedResourcesIDs[relatedIndex] = resolveMappedID(
+						mapping,
+						idMapping,
+						rule.RelatedResourcesIDs[relatedIndex],
+						"ref",
+					)
 				}
 			}
-
-			newResourcesResult[newID] = result
 		}
+
+		newResourcesResult[newID] = result
 	}
 	session.ResourcesResult = newResourcesResult
 
 	newResourceSource := make(map[string]reporthandling.Source, len(session.ResourceSource))
 	for oldID, source := range session.ResourceSource {
-		if newID, ok := idMapping[oldID]; ok {
-			newResourceSource[newID] = source
-		}
+		newID := resolveMappedID(mapping, idMapping, oldID, "ref")
+		newResourceSource[newID] = source
 	}
 	session.ResourceSource = newResourceSource
 
 	newResourcesPrioritized := make(map[string]prioritization.PrioritizedResource, len(session.ResourcesPrioritized))
 	for oldID, prioritized := range session.ResourcesPrioritized {
-		if newID, ok := idMapping[oldID]; ok {
-			prioritized.ResourceID = newID
-			newResourcesPrioritized[newID] = prioritized
-		}
+		newID := resolveMappedID(mapping, idMapping, oldID, "ref")
+		prioritized.ResourceID = newID
+		newResourcesPrioritized[newID] = prioritized
 	}
 	session.ResourcesPrioritized = newResourcesPrioritized
 
 	newResourceAttackTracks := make(map[string]v1alpha1.IAttackTrack, len(session.ResourceAttackTracks))
 	for oldID, attackTrack := range session.ResourceAttackTracks {
-		if newID, ok := idMapping[oldID]; ok {
-			newResourceAttackTracks[newID] = attackTrack
-		}
+		newID := resolveMappedID(mapping, idMapping, oldID, "ref")
+		newResourceAttackTracks[newID] = attackTrack
 	}
 	session.ResourceAttackTracks = newResourceAttackTracks
+}
+
+func resolveMappedID(mapping *Mapping, idMapping map[string]string, originalID, prefix string) string {
+	if mappedID, ok := idMapping[originalID]; ok {
+		return mappedID
+	}
+
+	return mapping.GetOrCreate(prefix, originalID)
 }
