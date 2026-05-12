@@ -1,17 +1,26 @@
 package printer
 
 import (
+	"bytes"
 	"context"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/opa-utils/reporthandling/apis"
+	reporthandlingv2 "github.com/kubescape/opa-utils/reporthandling/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+var updateGolden = flag.Bool("update-golden", false, "regenerate JUnit golden fixture under testdata/")
 
 func TestJunitPrinter(t *testing.T) {
 	// Verbose mode off
@@ -110,18 +119,26 @@ func TestListTestSuites(t *testing.T) {
 	results := cautils.NewOPASessionObjMock()
 	testsSuites := listTestsSuite(results)
 
+	if assert.Len(t, testsSuites, 1) {
+		// Timestamp is generated from time.Now() when the report has no
+		// generation time set, so just assert it parses as ISO 8601 and zero it
+		// out before comparing the rest of the struct.
+		_, err := time.Parse("2006-01-02T15:04:05Z", testsSuites[0].Timestamp)
+		assert.NoError(t, err, "timestamp should be ISO 8601")
+		testsSuites[0].Timestamp = ""
+	}
+
 	expectedTestSuites := []JUnitTestSuite{
 		{
-			XMLName:   xml.Name{Space: "", Local: ""},
-			Tests:     0,
-			Name:      "kubescape",
-			Errors:    0,
-			Failures:  0,
-			Hostname:  "",
-			ID:        0,
-			Skipped:   "",
-			Time:      "",
-			Timestamp: "0001-01-01 00:00:00 +0000 UTC",
+			XMLName:  xml.Name{Space: "", Local: ""},
+			Tests:    0,
+			Name:     "kubescape",
+			Errors:   0,
+			Failures: 0,
+			Hostname: "",
+			ID:       0,
+			Skipped:  0,
+			Time:     "",
 			Properties: []JUnitProperty{
 				{Name: "complianceScore", Value: "0.00"},
 			},
@@ -291,4 +308,148 @@ func TestBuildSkipMessage(t *testing.T) {
 			assert.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+// TestJunitOutputInvariants is a regression test for the bugs reported in
+// issue #2099: counts mismatch, zero-time timestamps, missing XML prolog,
+// string-typed Skipped attribute, multi-line failure messages, and empty
+// attributes. It exercises the full ActionPrint path against a mock session
+// populated from the shared mock_summaryDetails.json fixture and asserts the
+// invariants standard JUnit parsers depend on.
+func TestJunitOutputInvariants(t *testing.T) {
+	mockSummary, err := mockSummaryDetails()
+	require.NoError(t, err)
+
+	session := cautils.NewOPASessionObjMock()
+	session.Report = &reporthandlingv2.PostureReport{
+		SummaryDetails: *mockSummary,
+	}
+
+	tmp, err := os.CreateTemp("", "junit-regression-*.xml")
+	require.NoError(t, err)
+	defer os.Remove(tmp.Name())
+
+	jp := NewJunitPrinter(false)
+	jp.writer = tmp
+	jp.ActionPrint(context.Background(), session, nil)
+	require.NoError(t, tmp.Close())
+
+	raw, err := os.ReadFile(tmp.Name())
+	require.NoError(t, err)
+
+	// 4c — XML prolog present.
+	assert.True(t, bytes.HasPrefix(raw, []byte("<?xml")), "output must start with XML prolog")
+
+	// Round-trip through encoding/xml to ensure the document is well-formed.
+	var got JUnitXML
+	dec := xml.NewDecoder(bytes.NewReader(raw))
+	require.NoError(t, dec.Decode(&got.TestSuites), "output must round-trip through encoding/xml")
+	require.NotEmpty(t, got.TestSuites.Suites, "expected at least one <testsuite>")
+
+	// 4a — Σ(children) == parent for tests, failures, errors.
+	var sumTests, sumFailures, sumErrors int
+	for _, s := range got.TestSuites.Suites {
+		sumTests += s.Tests
+		sumFailures += s.Failures
+		sumErrors += s.Errors
+	}
+	assert.Equal(t, sumTests, got.TestSuites.Tests, "parent tests must equal sum of child tests")
+	assert.Equal(t, sumFailures, got.TestSuites.Failures, "parent failures must equal sum of child failures")
+	assert.Equal(t, sumErrors, got.TestSuites.Errors, "parent errors must equal sum of child errors")
+
+	// 4b — Timestamp is ISO 8601, not Go's default zero time.
+	for _, s := range got.TestSuites.Suites {
+		assert.NotContains(t, s.Timestamp, "0001-01-01", "timestamp must not be Go zero time")
+		_, perr := time.Parse("2006-01-02T15:04:05Z", s.Timestamp)
+		assert.NoError(t, perr, "timestamp %q must be ISO 8601", s.Timestamp)
+	}
+
+	// 4d — Skipped is now typed as int; the marshaller no longer emits skipped="".
+	assert.NotContains(t, string(raw), `skipped=""`, "skipped attribute must not be an empty string")
+
+	// 4e — Failure body lives in chardata, not in a multi-line message attribute.
+	for _, s := range got.TestSuites.Suites {
+		for _, tc := range s.TestCases {
+			if tc.Failure == nil {
+				continue
+			}
+			assert.NotContains(t, tc.Failure.Message, "\n", "failure message attribute must not contain newlines")
+			if strings.Contains(tc.Failure.Contents, "Remediation:") {
+				// remediation detail must live in element body, not the attribute
+				assert.NotContains(t, tc.Failure.Message, "Remediation:", "remediation belongs in the element body")
+			}
+		}
+	}
+
+	// 4f — Optional attributes are omitted when empty.
+	assert.NotContains(t, string(raw), `hostname=""`, "empty hostname attribute should be omitted")
+	assert.NotContains(t, string(raw), `time=""`, "empty time attribute should be omitted")
+
+	// Sanity check: golden testdata fixture still exists alongside this test.
+	_, statErr := os.Stat(filepath.Join("testdata", "mock_summaryDetails.json"))
+	assert.NoError(t, statErr)
+}
+
+// TestJunitGoldenFile pins the marshalled JUnit output byte-for-byte against
+// testdata/junit_golden.xml so future regressions of the issue #2099 fixes are
+// caught at review time. A fixed ReportGenerationTime keeps the output
+// deterministic; run with `go test -update-golden` to regenerate the fixture.
+func TestJunitGoldenFile(t *testing.T) {
+	mockSummary, err := mockSummaryDetails()
+	require.NoError(t, err)
+
+	session := cautils.NewOPASessionObjMock()
+	session.Report = &reporthandlingv2.PostureReport{
+		SummaryDetails:       *mockSummary,
+		ReportGenerationTime: time.Date(2024, 3, 14, 9, 15, 26, 0, time.UTC),
+	}
+
+	tmp, err := os.CreateTemp("", "junit-golden-*.xml")
+	require.NoError(t, err)
+	defer os.Remove(tmp.Name())
+
+	jp := NewJunitPrinter(false)
+	jp.writer = tmp
+	jp.ActionPrint(context.Background(), session, nil)
+	require.NoError(t, tmp.Close())
+
+	got, err := os.ReadFile(tmp.Name())
+	require.NoError(t, err)
+
+	goldenPath := filepath.Join("testdata", "junit_golden.xml")
+	if *updateGolden {
+		require.NoError(t, os.WriteFile(goldenPath, got, 0o644))
+	}
+
+	want, err := os.ReadFile(goldenPath)
+	require.NoError(t, err, "golden fixture missing — run `go test -update-golden`")
+	assert.Equal(t, string(want), string(got), "marshalled JUnit output diverged from testdata/junit_golden.xml")
+
+	// Also round-trip the golden file through encoding/xml and re-check the
+	// invariants on the *stored* fixture so a hand-edited golden that breaks
+	// JUnit semantics still fails the test.
+	var doc JUnitXML
+	require.NoError(t, xml.NewDecoder(bytes.NewReader(want)).Decode(&doc.TestSuites))
+	require.True(t, bytes.HasPrefix(want, []byte("<?xml")), "golden must include XML prolog")
+	var sumTests, sumFailures, sumErrors int
+	for _, s := range doc.TestSuites.Suites {
+		sumTests += s.Tests
+		sumFailures += s.Failures
+		sumErrors += s.Errors
+		assert.NotContains(t, s.Timestamp, "0001-01-01", "golden timestamp must not be Go zero time")
+	}
+	assert.Equal(t, sumTests, doc.TestSuites.Tests, "golden: Σ child tests must equal parent")
+	assert.Equal(t, sumFailures, doc.TestSuites.Failures, "golden: Σ child failures must equal parent")
+	assert.Equal(t, sumErrors, doc.TestSuites.Errors, "golden: Σ child errors must equal parent")
+}
+
+// TestIso8601Timestamp covers the small helper that powers the timestamp fix
+// in 4b — including the fallback when ReportGenerationTime is the zero value.
+func TestIso8601Timestamp(t *testing.T) {
+	fixed := time.Date(2024, 3, 14, 9, 15, 26, 0, time.UTC)
+	assert.Equal(t, "2024-03-14T09:15:26Z", iso8601Timestamp(fixed))
+
+	got := iso8601Timestamp(time.Time{})
+	_, err := time.Parse("2006-01-02T15:04:05Z", got)
+	assert.NoError(t, err, "zero time must fall back to a valid ISO 8601 timestamp, got %q", got)
 }
