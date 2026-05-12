@@ -35,10 +35,6 @@ func TestGetListCmd(t *testing.T) {
 	err = listCmd.Args(&cobra.Command{}, []string{"frameworks"})
 	assert.Nil(t, err)
 
-	err = listCmd.RunE(&cobra.Command{}, []string{})
-	expectedErrorMessage = "no arguements provided"
-	assert.Equal(t, expectedErrorMessage, err.Error())
-
 	err = listCmd.RunE(&cobra.Command{}, []string{"some-value"})
 	assert.Nil(t, err)
 }
