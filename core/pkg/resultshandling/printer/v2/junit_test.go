@@ -225,6 +225,78 @@ func TestProperties(t *testing.T) {
 	}
 }
 
+func TestTestCases_SkipMessage(t *testing.T) {
+	tests := []struct {
+		name      string
+		subStatus apis.ScanningSubStatus
+		innerInfo string
+		wantMsg   string
+	}{
+		{
+			name:      "not evaluated",
+			subStatus: apis.SubStatusNotEvaluated,
+			innerInfo: string(apis.SubStatusNotEvaluatedInfo),
+			wantMsg:   "notEvaluated: " + string(apis.SubStatusNotEvaluatedInfo),
+		},
+		{
+			name:      "configuration",
+			subStatus: apis.SubStatusConfiguration,
+			innerInfo: string(apis.SubStatusConfigurationInfo),
+			wantMsg:   "configuration: " + string(apis.SubStatusConfigurationInfo),
+		},
+		{
+			name:      "manual review",
+			subStatus: apis.SubStatusManualReview,
+			innerInfo: string(apis.SubStatusManualReviewInfo),
+			wantMsg:   "manual review: " + string(apis.SubStatusManualReviewInfo),
+		},
+		{
+			name:      "requires review",
+			subStatus: apis.SubStatusRequiresReview,
+			innerInfo: string(apis.SubStatusRequiresReviewInfo),
+			wantMsg:   "requires review: " + string(apis.SubStatusRequiresReviewInfo),
+		},
+		{
+			name:      "unknown substatus no info",
+			subStatus: apis.SubStatusUnknown,
+			innerInfo: "",
+			wantMsg:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			results := cautils.NewOPASessionObjMock()
+			results.Report.SummaryDetails.Controls = reportsummary.ControlSummaries{
+				"C-0001": reportsummary.ControlSummary{
+					ControlID: "C-0001",
+					Name:      "test-control",
+					StatusInfo: apis.StatusInfo{
+						InnerStatus: apis.StatusSkipped,
+						SubStatus:   tt.subStatus,
+						InnerInfo:   tt.innerInfo,
+					},
+				},
+			}
+
+			cases := testsCases(results, &results.Report.SummaryDetails.Controls, "TestSuite")
+
+			if assert.Len(t, cases, 1) {
+				if tt.wantMsg == "" {
+					if cases[0].SkipMessage != nil {
+						assert.Equal(t, tt.wantMsg, cases[0].SkipMessage.Message)
+					}
+				} else {
+					if assert.NotNil(t, cases[0].SkipMessage) {
+						assert.Equal(t, tt.wantMsg, cases[0].SkipMessage.Message)
+					}
+				}
+				assert.Nil(t, cases[0].Failure)
+			}
+		})
+	}
+}
+
 func TestSetWriter_Junit(t *testing.T) {
 	tests := []struct {
 		name       string
