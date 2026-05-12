@@ -1,7 +1,6 @@
 package list
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -53,10 +52,6 @@ func GetListCmd(ks meta.IKubescape) *cobra.Command {
 
 			if err := flagValidationList(&listPolicies); err != nil {
 				return err
-			}
-
-			if len(args) < 1 {
-				return errors.New("no arguements provided")
 			}
 
 			listPolicies.Target = args[0]

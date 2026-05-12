@@ -31,7 +31,7 @@ func GetCompletionCmd() *cobra.Command {
 		Run: func(cmd *cobra.Command, args []string) {
 			// Check if args array is not empty
 			if len(args) == 0 {
-				fmt.Println("No arguements provided.")
+				fmt.Println("No arguments provided.")
 				return
 			}
 

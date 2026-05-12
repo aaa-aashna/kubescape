@@ -33,9 +33,9 @@ func TestGetCompletionCmd_RunExpectedOutputs(t *testing.T) {
 			want: "Invalid arguement unknown",
 		},
 		{
-			name: "Empty arguements",
+			name: "Empty arguments",
 			args: []string{},
-			want: "No arguements provided.\n",
+			want: "No arguments provided.\n",
 		},
 	}
 
