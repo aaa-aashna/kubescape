@@ -137,6 +137,7 @@ func getFrameworkCmd(ks meta.IKubescape, scanInfo *cautils.ScanInfo) *cobra.Comm
 			}
 
 			enforceSeverityThresholds(results.GetData().Report.SummaryDetails.GetResourcesSeverityCounters(), scanInfo, terminateOnExceedingSeverity)
+			enforceCoverageThreshold(results.GetData().ScanCoverage, len(results.GetData().Report.SummaryDetails.Controls), scanInfo)
 			return nil
 		},
 	}
@@ -182,6 +183,26 @@ func countersExceedSeverityThreshold(severityCounters reportsummary.ISeverityCou
 // terminateOnExceedingSeverity terminates the application on exceeding severity
 func terminateOnExceedingSeverity(scanInfo *cautils.ScanInfo, l helpers.ILogger) {
 	l.Fatal("compliance result exceeds severity threshold", helpers.String("set severity threshold", scanInfo.FailThresholdSeverity))
+}
+
+// enforceCoverageThreshold fails the scan if the percentage of evaluated controls
+// is below scanInfo.FailCoverageThreshold. Coverage = (total - notEvaluated) / total * 100.
+// A threshold of 0 disables the check.
+func enforceCoverageThreshold(coverage cautils.ScanCoverage, totalControls int, scanInfo *cautils.ScanInfo) {
+	if scanInfo.FailCoverageThreshold <= 0 {
+		return
+	}
+	if totalControls == 0 {
+		return
+	}
+	notEvaluated := len(coverage.NotEvaluatedControls)
+	coveragePct := float32(totalControls-notEvaluated) / float32(totalControls) * 100
+	if coveragePct < scanInfo.FailCoverageThreshold {
+		logger.L().Fatal("scan coverage is below permitted threshold",
+			helpers.String("coverage", fmt.Sprintf("%.2f%%", coveragePct)),
+			helpers.String("fail-coverage-below", fmt.Sprintf("%.2f%%", scanInfo.FailCoverageThreshold)),
+		)
+	}
 }
 
 // enforceSeverityThresholds ensures that the scan results are below the defined severity threshold
