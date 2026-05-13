@@ -212,6 +212,74 @@ func TestRemoveEphemeralContainersData_ClearsEnvFrom(t *testing.T) {
 }
 
 
+
+func TestRemoveContainersData_ClearsValueFrom(t *testing.T) {
+	containers := []corev1.Container{
+		{
+			Env: []corev1.EnvVar{
+				{
+					Name: "SECRET_KEY",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+							Key:                  "password",
+						},
+					},
+				},
+				{
+					Name: "CONFIG_KEY",
+					ValueFrom: &corev1.EnvVarSource{
+						ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "my-configmap"},
+							Key:                  "config-key",
+						},
+					},
+				},
+			},
+		},
+	}
+	removeContainersData(containers)
+	for _, c := range containers {
+		for _, env := range c.Env {
+			assert.Nil(t, env.ValueFrom, "ValueFrom must be cleared to prevent secret and configmap name leakage")
+		}
+	}
+}
+
+func TestRemoveEphemeralContainersData_ClearsValueFrom(t *testing.T) {
+	containers := []corev1.EphemeralContainer{
+		{
+			EphemeralContainerCommon: corev1.EphemeralContainerCommon{
+				Env: []corev1.EnvVar{
+					{
+						Name: "SECRET_KEY",
+						ValueFrom: &corev1.EnvVarSource{
+							SecretKeyRef: &corev1.SecretKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+								Key:                  "password",
+							},
+						},
+					},
+					{
+						Name: "CONFIG_KEY",
+						ValueFrom: &corev1.EnvVarSource{
+							ConfigMapKeyRef: &corev1.ConfigMapKeySelector{
+								LocalObjectReference: corev1.LocalObjectReference{Name: "my-configmap"},
+								Key:                  "config-key",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	removeEphemeralContainersData(containers)
+	for _, c := range containers {
+		for _, env := range c.Env {
+			assert.Nil(t, env.ValueFrom, "ValueFrom must be cleared to prevent secret and configmap name leakage")
+		}
+	}
+}
 func TestApplyExceptionsToManualControls(t *testing.T) {
 	processor := exceptions.NewProcessor()
 
