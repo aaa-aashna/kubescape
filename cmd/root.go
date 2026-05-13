@@ -58,7 +58,7 @@ func getRootCmd(ks meta.IKubescape, ksVersion, ksCommit, ksDate string) *cobra.C
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			k8sinterface.SetClusterContextName(rootInfo.KubeContext)
 			initLogger()
-			initLoggerLevel()
+			initLoggerLevel(cmd)
 			initEnvironment()
 			initCacheDir()
 		},

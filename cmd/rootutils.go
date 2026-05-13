@@ -15,6 +15,7 @@ import (
 	"github.com/kubescape/kubescape/v3/core/cautils"
 	"github.com/kubescape/kubescape/v3/core/cautils/getter"
 	"github.com/mattn/go-isatty"
+	"github.com/spf13/cobra"
 )
 
 func initLogger() {
@@ -33,10 +34,23 @@ func initLogger() {
 	logger.InitLogger(rootInfo.LoggerName)
 }
 
-func initLoggerLevel() {
-	if rootInfo.Logger == helpers.InfoLevel.String() {
-	} else if l := os.Getenv("KS_LOGGER"); l != "" {
-		rootInfo.Logger = l
+func initLoggerLevel(cmd *cobra.Command) {
+	loggerExplicit := false
+	if cmd != nil {
+		// Persistent flags are parsed on the root while traversing to the subcommand.
+		// cmd.Flag("logger") on a child can be a merged copy that never gets Changed=true;
+		// the root flag holds the authoritative parse state (see cobra Traverse + ParseFlags).
+		r := cmd.Root()
+		if lf := r.Flag("logger"); lf != nil {
+			loggerExplicit = lf.Changed
+		} else if lf := cmd.Flag("logger"); lf != nil {
+			loggerExplicit = lf.Changed
+		}
+	}
+	if !loggerExplicit && rootInfo.Logger == helpers.InfoLevel.String() {
+		if l := os.Getenv("KS_LOGGER"); l != "" {
+			rootInfo.Logger = l
+		}
 	}
 
 	if err := logger.L().SetLevel(rootInfo.Logger); err != nil {
