@@ -26,6 +26,8 @@ func (ks *Kubescape) Fix(fixInfo *metav1.FixInfo) error {
 
 	if len(resourcesToFix) == 0 {
 		logger.L().Info(noResourcesToFix)
+		// Even with nothing to auto-fix, surface controls that still need manual remediation.
+		handler.PrintUnfixedControls()
 		return nil
 	}
 
@@ -33,16 +35,39 @@ func (ks *Kubescape) Fix(fixInfo *metav1.FixInfo) error {
 
 	if fixInfo.DryRun {
 		logger.L().Info(noChangesApplied)
+		handler.PrintUnfixedControls()
 		return nil
 	}
 
 	if !fixInfo.NoConfirm && !userConfirmed() {
 		logger.L().Info(noChangesApplied)
+		handler.PrintUnfixedControls()
 		return nil
 	}
 
+	plannedFiles := make(map[string]bool, len(resourcesToFix))
+	for _, r := range resourcesToFix {
+		plannedFiles[r.FilePath] = true
+	}
+	plannedFilesCount := len(plannedFiles)
+
 	updatedFilesCount, errors := handler.ApplyChanges(ks.Context(), resourcesToFix)
-	logger.L().Info(fmt.Sprintf("Fixed resources in %d files.", updatedFilesCount))
+	plannedControls := handler.FixedControlsCount()
+	totalFailed := plannedControls + len(handler.UnfixedControls())
+
+	// If every planned file wrote successfully, the planned control count equals
+	// what actually landed on disk. Otherwise the apply phase failed for at
+	// least one file and the planned count overstates reality — say so.
+	if updatedFilesCount == plannedFilesCount {
+		logger.L().Info(fmt.Sprintf("Fixed %d of %d flagged control instances across %d file(s).",
+			plannedControls, totalFailed, updatedFilesCount))
+	} else {
+		logger.L().Info(fmt.Sprintf(
+			"Planned fixes for %d of %d flagged control instances across %d file(s); applied to %d file(s) — the remaining files errored, see warnings below.",
+			plannedControls, totalFailed, plannedFilesCount, updatedFilesCount))
+	}
+
+	handler.PrintUnfixedControls()
 
 	if len(errors) > 0 {
 		for _, err := range errors {

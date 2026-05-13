@@ -43,7 +43,13 @@ func NewFixHandler(fixInfo *metav1.FixInfo) (*FixHandler, error) {
 
 	var reportObj reporthandlingv2.PostureReport
 	if err = json.Unmarshal(byteValue, &reportObj); err != nil {
-		return nil, err
+		// Heuristic: if the file looks like YAML rather than JSON, give the
+		// user a clearer message than the raw json decoder error.
+		trimmed := strings.TrimLeft(string(byteValue), " \t\r\n")
+		if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
+			return nil, fmt.Errorf("%q does not look like a kubescape JSON scan report. Run `kubescape scan --format json --output <file>` first and pass that file to `kubescape fix`", fixInfo.ReportFile)
+		}
+		return nil, fmt.Errorf("failed to parse %q as a kubescape JSON scan report: %w", fixInfo.ReportFile, err)
 	}
 
 	if err = isSupportedScanningTarget(&reportObj); err != nil {
@@ -125,6 +131,9 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 	resourceIdToResource := h.buildResourcesMap()
 
 	resourcesToFix := make([]ResourceFixInfo, 0)
+	h.unfixedControls = h.unfixedControls[:0]
+	h.fixedControlsCount = 0
+
 	for _, result := range h.reportObj.Results {
 		if !result.GetStatus(nil).IsFailed() {
 			continue
@@ -133,23 +142,48 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 		resourceID := result.ResourceID
 		resourceObj := resourceIdToResource[resourceID]
 		resourcePath := h.getPathFromRawResource(resourceObj.GetObject())
+
+		// Determine an upfront reason if we already know this resource is not
+		// fixable, so we can still surface its failed controls as "unfixed".
+		skipReason := ""
 		if resourcePath == "" {
-			continue
+			skipReason = "skipped: resource has no local file path"
+		} else if resourceObj.Source == nil || resourceObj.Source.FileType != reporthandling.SourceTypeYaml {
+			skipReason = "skipped: source is not a YAML file"
 		}
 
-		if resourceObj.Source == nil || resourceObj.Source.FileType != reporthandling.SourceTypeYaml {
-			continue
+		var absolutePath string
+		var documentIndex int
+		if skipReason == "" {
+			relativePath, idx, err := h.getFilePathAndIndex(resourcePath)
+			if err != nil {
+				logger.L().Ctx(ctx).Warning("Skipping invalid resource path: " + resourcePath)
+				skipReason = "skipped: invalid resource path"
+			} else {
+				absolutePath = path.Join(h.localBasePath, relativePath)
+				documentIndex = idx
+				if _, err := os.Stat(absolutePath); err != nil {
+					logger.L().Ctx(ctx).Warning("Skipping missing file: " + absolutePath)
+					skipReason = "skipped: file not found"
+				}
+			}
 		}
 
-		relativePath, documentIndex, err := h.getFilePathAndIndex(resourcePath)
-		if err != nil {
-			logger.L().Ctx(ctx).Warning("Skipping invalid resource path: " + resourcePath)
-			continue
-		}
-
-		absolutePath := path.Join(h.localBasePath, relativePath)
-		if _, err := os.Stat(absolutePath); err != nil {
-			logger.L().Ctx(ctx).Warning("Skipping missing file: " + absolutePath)
+		if skipReason != "" {
+			for i := range result.AssociatedControls {
+				ac := &result.AssociatedControls[i]
+				if !ac.GetStatus(nil).IsFailed() {
+					continue
+				}
+				h.unfixedControls = append(h.unfixedControls, UnfixedControl{
+					ControlID:    ac.GetID(),
+					ControlName:  ac.GetName(),
+					ResourceName: resourceObj.GetName(),
+					ResourceKind: resourceObj.GetKind(),
+					FilePath:     resourcePath,
+					Reason:       skipReason,
+				})
+			}
 			continue
 		}
 
@@ -161,9 +195,29 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 		}
 
 		for i := range result.AssociatedControls {
-			if result.AssociatedControls[i].GetStatus(nil).IsFailed() {
-				rfi.addYamlExpressionsFromResourceAssociatedControl(documentIndex, &result.AssociatedControls[i], h.fixInfo.SkipUserValues)
+			ac := &result.AssociatedControls[i]
+			if !ac.GetStatus(nil).IsFailed() {
+				continue
 			}
+
+			added := rfi.addYamlExpressionsFromResourceAssociatedControl(documentIndex, ac, h.fixInfo.SkipUserValues)
+			if added {
+				h.fixedControlsCount++
+				continue
+			}
+
+			reason := "no auto-fix available for this control"
+			if h.fixInfo.SkipUserValues && controlHasOnlyUserValueFixes(ac) {
+				reason = "skipped: auto-fix requires a user-supplied value (--skip-user-values is set)"
+			}
+			h.unfixedControls = append(h.unfixedControls, UnfixedControl{
+				ControlID:    ac.GetID(),
+				ControlName:  ac.GetName(),
+				ResourceName: resourceObj.GetName(),
+				ResourceKind: resourceObj.GetKind(),
+				FilePath:     absolutePath,
+				Reason:       reason,
+			})
 		}
 
 		if len(rfi.YamlExpressions) > 0 {
@@ -172,6 +226,72 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 	}
 
 	return resourcesToFix
+}
+
+// UnfixedControls returns the failed (resource, control) tuples discovered during
+// the most recent call to PrepareResourcesToFix that the fixer did not auto-remediate.
+func (h *FixHandler) UnfixedControls() []UnfixedControl {
+	return h.unfixedControls
+}
+
+// FixedControlsCount returns the number of failed (resource, control) tuples that
+// the fixer produced at least one yaml edit for during the most recent call to
+// PrepareResourcesToFix.
+func (h *FixHandler) FixedControlsCount() int {
+	return h.fixedControlsCount
+}
+
+// PrintUnfixedControls logs the failed (resource, control) tuples that require
+// manual remediation, deduplicating entries across multiple identical failures.
+func (h *FixHandler) PrintUnfixedControls() {
+	if len(h.unfixedControls) == 0 {
+		return
+	}
+
+	seen := make(map[string]bool, len(h.unfixedControls))
+	var sb strings.Builder
+	totalFailed := h.fixedControlsCount + len(h.unfixedControls)
+	sb.WriteString(fmt.Sprintf("Auto-fixed %d of %d flagged control instances. The following require manual remediation:\n",
+		h.fixedControlsCount, totalFailed))
+
+	for _, u := range h.unfixedControls {
+		key := u.ControlID + "|" + u.ResourceKind + "/" + u.ResourceName + "|" + u.FilePath
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+
+		location := u.FilePath
+		if location == "" {
+			location = "<unknown>"
+		}
+		sb.WriteString(fmt.Sprintf("  - %s %s on %s/%s (%s) — %s\n",
+			u.ControlID, u.ControlName, u.ResourceKind, u.ResourceName, location, u.Reason))
+	}
+
+	logger.L().Warning(sb.String())
+}
+
+// controlHasOnlyUserValueFixes reports whether every available FixPath on the
+// control requires a YOUR_-prefixed user-supplied value (i.e. all rules would be
+// skipped when SkipUserValues is set).
+func controlHasOnlyUserValueFixes(ac *resourcesresults.ResourceAssociatedControl) bool {
+	hasFixPath := false
+	for _, rule := range ac.ResourceAssociatedRules {
+		if !rule.GetStatus(nil).IsFailed() {
+			continue
+		}
+		for _, rp := range rule.Paths {
+			if rp.FixPath.Path == "" {
+				continue
+			}
+			hasFixPath = true
+			if !strings.HasPrefix(rp.FixPath.Value, UserValuePrefix) {
+				return false
+			}
+		}
+	}
+	return hasFixPath
 }
 
 func (h *FixHandler) PrintExpectedChanges(resourcesToFix []ResourceFixInfo) {
@@ -290,7 +410,11 @@ func (h *FixHandler) getFileYamlExpressions(resourcesToFix []ResourceFixInfo) ma
 	return fileYamlExpressions
 }
 
-func (rfi *ResourceFixInfo) addYamlExpressionsFromResourceAssociatedControl(documentIndex int, ac *resourcesresults.ResourceAssociatedControl, skipUserValues bool) {
+// addYamlExpressionsFromResourceAssociatedControl appends one yaml expression
+// per available FixPath. It returns true if at least one expression was added —
+// callers use this to tell whether the control was actually auto-remediated.
+func (rfi *ResourceFixInfo) addYamlExpressionsFromResourceAssociatedControl(documentIndex int, ac *resourcesresults.ResourceAssociatedControl, skipUserValues bool) bool {
+	added := false
 	for _, rule := range ac.ResourceAssociatedRules {
 		if !rule.GetStatus(nil).IsFailed() {
 			continue
@@ -306,8 +430,10 @@ func (rfi *ResourceFixInfo) addYamlExpressionsFromResourceAssociatedControl(docu
 
 			yamlExpression := FixPathToValidYamlExpression(rulePaths.FixPath.Path, rulePaths.FixPath.Value, documentIndex)
 			rfi.YamlExpressions[yamlExpression] = rulePaths.FixPath
+			added = true
 		}
 	}
+	return added
 }
 
 // reduceYamlExpressions reduces the number of yaml expressions to a single one
