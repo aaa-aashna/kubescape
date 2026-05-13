@@ -225,7 +225,7 @@ func envToString(env string, defaultValue string) string {
 	return defaultValue
 }
 
-func writeScanErrorToFile(err error, scanID string) error {
+func writeScanErrorToFile(err error, scanID string) (e error) {
 	if e := os.MkdirAll(FailedOutputDir, os.ModePerm); e != nil {
 		return fmt.Errorf("failed to scan. reason: '%s'. failed to save error in file - failed to create directory. reason: %s", err.Error(), e.Error())
 	}
