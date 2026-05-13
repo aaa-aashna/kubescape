@@ -123,94 +123,71 @@ func newHandlerForResources(baseDir string, results []resourcesresults.Result, r
 	}
 }
 
-// --- controlHasOnlyUserValueFixes ----------------------------------------
-
-func TestControlHasOnlyUserValueFixes(t *testing.T) {
-	t.Run("all YOUR_-prefixed", func(t *testing.T) {
-		ac := failedControl("C-X", "x",
-			failedRuleWithFix("metadata.namespace", "YOUR_NAMESPACE"),
-			failedRuleWithFix("spec.replicas", "YOUR_COUNT"),
-		)
-		assert.True(t, controlHasOnlyUserValueFixes(&ac))
-	})
-	t.Run("mixed", func(t *testing.T) {
-		ac := failedControl("C-X", "x",
-			failedRuleWithFix("metadata.namespace", "YOUR_NAMESPACE"),
-			failedRuleWithFix("spec.containers[0].securityContext.privileged", "false"),
-		)
-		assert.False(t, controlHasOnlyUserValueFixes(&ac))
-	})
-	t.Run("no concrete-value fix", func(t *testing.T) {
-		ac := failedControl("C-X", "x",
-			failedRuleWithFix("spec.containers[0].securityContext.privileged", "false"),
-		)
-		assert.False(t, controlHasOnlyUserValueFixes(&ac))
-	})
-	t.Run("no fix paths at all", func(t *testing.T) {
-		ac := failedControl("C-X", "x", failedRuleNoFix())
-		assert.False(t, controlHasOnlyUserValueFixes(&ac))
-	})
-	t.Run("rule passed is ignored", func(t *testing.T) {
-		ac := failedControl("C-X", "x")
-		ac.ResourceAssociatedRules = []resourcesresults.ResourceAssociatedRule{
-			{
-				Name:   "passed-rule",
-				Status: apis.StatusPassed,
-				Paths: []armotypes.PosturePaths{
-					{FixPath: armotypes.FixPath{Path: "x", Value: "1"}},
-				},
-			},
-		}
-		assert.False(t, controlHasOnlyUserValueFixes(&ac))
-	})
-}
-
 // --- addYamlExpressionsFromResourceAssociatedControl ---------------------
 
-func TestAddYamlExpressions_ReturnsWhetherAnythingAdded(t *testing.T) {
-	t.Run("fixable rule adds expression", func(t *testing.T) {
+func TestAddYamlExpressions_PerPathClassification(t *testing.T) {
+	t.Run("fully fixable rule", func(t *testing.T) {
 		rfi := &ResourceFixInfo{YamlExpressions: map[string]armotypes.FixPath{}}
 		ac := failedControl("C-1", "fixable",
 			failedRuleWithFix("spec.containers[0].securityContext.privileged", "false"),
 		)
-		added := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, false)
-		assert.True(t, added)
+		added, skipped := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, false)
+		assert.Equal(t, 1, added)
+		assert.Empty(t, skipped)
 		assert.Len(t, rfi.YamlExpressions, 1)
 	})
-	t.Run("no fix path → not added", func(t *testing.T) {
+	t.Run("rule with no fix path → no auto-fix skipped reason", func(t *testing.T) {
 		rfi := &ResourceFixInfo{YamlExpressions: map[string]armotypes.FixPath{}}
 		ac := failedControl("C-2", "no-fix", failedRuleNoFix())
-		added := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, false)
-		assert.False(t, added)
-		assert.Empty(t, rfi.YamlExpressions)
+		added, skipped := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, false)
+		assert.Equal(t, 0, added)
+		if assert.Len(t, skipped, 1) {
+			assert.Contains(t, skipped[0], "no auto-fix")
+		}
 	})
-	t.Run("YOUR_ value with skipUserValues → not added", func(t *testing.T) {
+	t.Run("YOUR_ value with skipUserValues → user-supplied-value skipped reason", func(t *testing.T) {
 		rfi := &ResourceFixInfo{YamlExpressions: map[string]armotypes.FixPath{}}
 		ac := failedControl("C-3", "user-val",
 			failedRuleWithFix("metadata.namespace", "YOUR_NAMESPACE"),
 		)
-		added := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, true)
-		assert.False(t, added)
-		assert.Empty(t, rfi.YamlExpressions)
+		added, skipped := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, true)
+		assert.Equal(t, 0, added)
+		if assert.Len(t, skipped, 1) {
+			assert.Contains(t, skipped[0], "user-supplied value")
+		}
 	})
 	t.Run("YOUR_ value without skipUserValues → added", func(t *testing.T) {
 		rfi := &ResourceFixInfo{YamlExpressions: map[string]armotypes.FixPath{}}
 		ac := failedControl("C-3", "user-val",
 			failedRuleWithFix("metadata.namespace", "YOUR_NAMESPACE"),
 		)
-		added := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, false)
-		assert.True(t, added)
-		assert.Len(t, rfi.YamlExpressions, 1)
+		added, skipped := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, false)
+		assert.Equal(t, 1, added)
+		assert.Empty(t, skipped)
 	})
-	t.Run("mixed YOUR_ + concrete with skipUserValues → only concrete added", func(t *testing.T) {
+	t.Run("partial: concrete + YOUR_ under skipUserValues → 1 added AND 1 skipped", func(t *testing.T) {
 		rfi := &ResourceFixInfo{YamlExpressions: map[string]armotypes.FixPath{}}
 		ac := failedControl("C-4", "mixed",
 			failedRuleWithFix("metadata.namespace", "YOUR_NAMESPACE"),
 			failedRuleWithFix("spec.containers[0].securityContext.privileged", "false"),
 		)
-		added := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, true)
-		assert.True(t, added)
-		assert.Len(t, rfi.YamlExpressions, 1)
+		added, skipped := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, true)
+		assert.Equal(t, 1, added, "the concrete rule produces a fix")
+		if assert.Len(t, skipped, 1, "the YOUR_-gated rule must be reported as skipped") {
+			assert.Contains(t, skipped[0], "user-supplied value")
+		}
+	})
+	t.Run("partial: concrete + no-fix rule → 1 added AND 1 skipped", func(t *testing.T) {
+		rfi := &ResourceFixInfo{YamlExpressions: map[string]armotypes.FixPath{}}
+		ac := failedControl("C-5", "concrete+nofix",
+			failedRuleWithFix("spec.containers[0].securityContext.privileged", "false"),
+			failedRuleNoFix(),
+		)
+		added, skipped := rfi.addYamlExpressionsFromResourceAssociatedControl(0, &ac, false)
+		assert.Equal(t, 1, added)
+		if assert.Len(t, skipped, 1) {
+			assert.Contains(t, skipped[0], "no auto-fix")
+		}
 	})
 }
 
@@ -392,7 +369,7 @@ func TestPrintUnfixedControls_Dedups(t *testing.T) {
 
 	// We can't directly capture logger output here, but we can at least
 	// verify it doesn't panic and the dedup helper logic doesn't blow up.
-	h.PrintUnfixedControls()
+	h.PrintUnfixedControls(PhaseApplied)
 
 	// And the underlying slice is unchanged (we only dedup at print time).
 	assert.Len(t, h.unfixedControls, 3)
@@ -400,7 +377,7 @@ func TestPrintUnfixedControls_Dedups(t *testing.T) {
 
 func TestPrintUnfixedControls_EmptyIsNoop(t *testing.T) {
 	h := &FixHandler{}
-	h.PrintUnfixedControls() // must not panic
+	h.PrintUnfixedControls(PhasePlanned) // must not panic
 }
 
 // --- NewFixHandler input validation --------------------------------------

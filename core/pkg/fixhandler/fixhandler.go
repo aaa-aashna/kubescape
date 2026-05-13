@@ -200,15 +200,24 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 				continue
 			}
 
-			added := rfi.addYamlExpressionsFromResourceAssociatedControl(documentIndex, ac, h.fixInfo.SkipUserValues)
-			if added {
+			added, skipped := rfi.addYamlExpressionsFromResourceAssociatedControl(documentIndex, ac, h.fixInfo.SkipUserValues)
+
+			// Fully auto-remediated: every failed path produced an expression.
+			if added > 0 && len(skipped) == 0 {
 				h.fixedControlsCount++
 				continue
 			}
 
+			// Partial or fully unfixed — surface as needing manual work. The
+			// concrete fixes (if any) are still applied via rfi.YamlExpressions,
+			// but the control is not counted as fully fixed because rules under
+			// it remain unaddressed.
 			reason := "no auto-fix available for this control"
-			if h.fixInfo.SkipUserValues && controlHasOnlyUserValueFixes(ac) {
-				reason = "skipped: auto-fix requires a user-supplied value (--skip-user-values is set)"
+			if len(skipped) > 0 {
+				reason = skipped[0]
+			}
+			if added > 0 {
+				reason = "partial: " + reason
 			}
 			h.unfixedControls = append(h.unfixedControls, UnfixedControl{
 				ControlID:    ac.GetID(),
@@ -243,9 +252,24 @@ func (h *FixHandler) FixedControlsCount() int {
 	return h.fixedControlsCount
 }
 
+// Phase tells PrintUnfixedControls whether the fixer has already written the
+// planned changes to disk or is still in a planning state (dry-run, declined
+// confirm, partial apply). The summary line phrases the verb accordingly.
+type Phase int
+
+const (
+	// PhasePlanned: fixes have been planned but not (fully) written. Use for
+	// --dry-run, declined confirm, and partial-apply paths.
+	PhasePlanned Phase = iota
+	// PhaseApplied: every planned fix was successfully written to disk.
+	PhaseApplied
+)
+
 // PrintUnfixedControls logs the failed (resource, control) tuples that require
 // manual remediation, deduplicating entries across multiple identical failures.
-func (h *FixHandler) PrintUnfixedControls() {
+// The verb on the summary line reflects phase: "Auto-fixed" only when every
+// planned fix was actually written; otherwise "Would auto-fix".
+func (h *FixHandler) PrintUnfixedControls(phase Phase) {
 	if len(h.unfixedControls) == 0 {
 		return
 	}
@@ -253,8 +277,13 @@ func (h *FixHandler) PrintUnfixedControls() {
 	seen := make(map[string]bool, len(h.unfixedControls))
 	var sb strings.Builder
 	totalFailed := h.fixedControlsCount + len(h.unfixedControls)
-	sb.WriteString(fmt.Sprintf("Auto-fixed %d of %d flagged control instances. The following require manual remediation:\n",
-		h.fixedControlsCount, totalFailed))
+
+	verb := "Would auto-fix"
+	if phase == PhaseApplied {
+		verb = "Auto-fixed"
+	}
+	sb.WriteString(fmt.Sprintf("%s %d of %d flagged control instances. The following require manual remediation:\n",
+		verb, h.fixedControlsCount, totalFailed))
 
 	for _, u := range h.unfixedControls {
 		key := u.ControlID + "|" + u.ResourceKind + "/" + u.ResourceName + "|" + u.FilePath
@@ -272,28 +301,6 @@ func (h *FixHandler) PrintUnfixedControls() {
 	}
 
 	logger.L().Warning(sb.String())
-}
-
-// controlHasOnlyUserValueFixes reports whether every available FixPath on the
-// control requires a YOUR_-prefixed user-supplied value (i.e. all rules would be
-// skipped when SkipUserValues is set).
-func controlHasOnlyUserValueFixes(ac *resourcesresults.ResourceAssociatedControl) bool {
-	hasFixPath := false
-	for _, rule := range ac.ResourceAssociatedRules {
-		if !rule.GetStatus(nil).IsFailed() {
-			continue
-		}
-		for _, rp := range rule.Paths {
-			if rp.FixPath.Path == "" {
-				continue
-			}
-			hasFixPath = true
-			if !strings.HasPrefix(rp.FixPath.Value, UserValuePrefix) {
-				return false
-			}
-		}
-	}
-	return hasFixPath
 }
 
 func (h *FixHandler) PrintExpectedChanges(resourcesToFix []ResourceFixInfo) {
@@ -412,29 +419,41 @@ func (h *FixHandler) getFileYamlExpressions(resourcesToFix []ResourceFixInfo) ma
 }
 
 // addYamlExpressionsFromResourceAssociatedControl appends one yaml expression
-// per available FixPath. It returns true if at least one expression was added —
-// callers use this to tell whether the control was actually auto-remediated.
-func (rfi *ResourceFixInfo) addYamlExpressionsFromResourceAssociatedControl(documentIndex int, ac *resourcesresults.ResourceAssociatedControl, skipUserValues bool) bool {
-	added := false
+// for every failed-rule FixPath that produces a concrete remediation. It returns
+// per-path counters so callers can distinguish fully-fixable controls from
+// partially-fixable controls (some paths fixable, some skipped/unfixable) from
+// fully-unfixable ones. skippedReasons describes paths that could not be
+// auto-remediated, in classification order.
+func (rfi *ResourceFixInfo) addYamlExpressionsFromResourceAssociatedControl(documentIndex int, ac *resourcesresults.ResourceAssociatedControl, skipUserValues bool) (added int, skippedReasons []string) {
 	for _, rule := range ac.ResourceAssociatedRules {
 		if !rule.GetStatus(nil).IsFailed() {
 			continue
 		}
 
+		ruleHadFixPath := false
 		for _, rulePaths := range rule.Paths {
 			if rulePaths.FixPath.Path == "" {
 				continue
 			}
+			ruleHadFixPath = true
+
 			if strings.HasPrefix(rulePaths.FixPath.Value, UserValuePrefix) && skipUserValues {
+				skippedReasons = append(skippedReasons, "skipped: auto-fix requires a user-supplied value (--skip-user-values is set)")
 				continue
 			}
 
 			yamlExpression := FixPathToValidYamlExpression(rulePaths.FixPath.Path, rulePaths.FixPath.Value, documentIndex)
 			rfi.YamlExpressions[yamlExpression] = rulePaths.FixPath
-			added = true
+			added++
+		}
+
+		// A failed rule with no FixPath at all is a check we don't know how to
+		// remediate automatically — still surface it as needing manual work.
+		if !ruleHadFixPath {
+			skippedReasons = append(skippedReasons, "no auto-fix available for this control")
 		}
 	}
-	return added
+	return added, skippedReasons
 }
 
 // reduceYamlExpressions reduces the number of yaml expressions to a single one
