@@ -350,6 +350,7 @@ func removeContainersData(containers []corev1.Container) {
 		for j := range containers[i].Env {
 			containers[i].Env[j].Value = "XXXXXX"
 		}
+		containers[i].EnvFrom = nil
 	}
 }
 func removeEphemeralContainersData(containers []corev1.EphemeralContainer) {
@@ -357,6 +358,7 @@ func removeEphemeralContainersData(containers []corev1.EphemeralContainer) {
 		for j := range containers[i].Env {
 			containers[i].Env[j].Value = "XXXXXX"
 		}
+		containers[i].EnvFrom = nil
 	}
 }
 

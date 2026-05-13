@@ -159,6 +159,59 @@ func TestRemoveEphemeralContainersData(t *testing.T) {
 	}
 }
 
+func TestRemoveContainersData_ClearsEnvFrom(t *testing.T) {
+	containers := []corev1.Container{
+		{
+			EnvFrom: []corev1.EnvFromSource{
+				{
+					SecretRef: &corev1.SecretEnvSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+					},
+				},
+				{
+					ConfigMapRef: &corev1.ConfigMapEnvSource{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "my-configmap"},
+					},
+				},
+			},
+		},
+	}
+
+	removeContainersData(containers)
+
+	for _, c := range containers {
+		assert.Nil(t, c.EnvFrom, "EnvFrom must be cleared to prevent secret name leakage")
+	}
+}
+
+func TestRemoveEphemeralContainersData_ClearsEnvFrom(t *testing.T) {
+	containers := []corev1.EphemeralContainer{
+		{
+			EphemeralContainerCommon: corev1.EphemeralContainerCommon{
+				EnvFrom: []corev1.EnvFromSource{
+					{
+						SecretRef: &corev1.SecretEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "my-secret"},
+						},
+					},
+					{
+						ConfigMapRef: &corev1.ConfigMapEnvSource{
+							LocalObjectReference: corev1.LocalObjectReference{Name: "my-configmap"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	removeEphemeralContainersData(containers)
+
+	for _, c := range containers {
+		assert.Nil(t, c.EnvFrom, "EnvFrom must be cleared to prevent secret name leakage")
+	}
+}
+
+
 func TestApplyExceptionsToManualControls(t *testing.T) {
 	processor := exceptions.NewProcessor()
 
