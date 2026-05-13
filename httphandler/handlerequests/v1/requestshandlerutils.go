@@ -226,10 +226,11 @@ func envToString(env string, defaultValue string) string {
 }
 
 func writeScanErrorToFile(err error, scanID string) (e error) {
-	if e := os.MkdirAll(FailedOutputDir, os.ModePerm); e != nil {
+	if e = os.MkdirAll(FailedOutputDir, os.ModePerm); e != nil {
 		return fmt.Errorf("failed to scan. reason: '%s'. failed to save error in file - failed to create directory. reason: %s", err.Error(), e.Error())
 	}
-	f, e := os.Create(filepath.Join(FailedOutputDir, scanID))
+	var f *os.File
+	f, e = os.Create(filepath.Join(FailedOutputDir, scanID))
 	if e != nil {
 		return fmt.Errorf("failed to scan. reason: '%s'. failed to save error in file - failed to open file for writing. reason: %s", err.Error(), e.Error())
 	}
@@ -239,7 +240,7 @@ func writeScanErrorToFile(err error, scanID string) (e error) {
 		}
 	}()
 
-	if _, e := f.Write([]byte(err.Error())); e != nil {
+	if _, e = f.Write([]byte(err.Error())); e != nil {
 		return fmt.Errorf("failed to scan. reason: '%s'. failed to save error in file - failed to write. reason: %s", err.Error(), e.Error())
 	}
 	return fmt.Errorf("failed to scan. reason: '%s'", err.Error())
