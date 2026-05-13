@@ -235,6 +235,44 @@ func TestPrepareResourcesToFix_ClassifiesFixedAndUnfixed(t *testing.T) {
 	}
 }
 
+// TestPrepareResourcesToFix_PartialControlClassification is the core #2108
+// regression test: a single control containing one concrete fix plus one
+// YOUR_-gated fix under --skip-user-values must appear in UnfixedControls()
+// with a "partial:" reason, NOT be counted as fully fixed.
+func TestPrepareResourcesToFix_PartialControlClassification(t *testing.T) {
+	dir := t.TempDir()
+	manifest := writeManifest(t, dir, "deploy.yaml", "apiVersion: apps/v1\nkind: Deployment\n")
+	rel, _ := filepath.Rel(dir, manifest)
+	res := buildResource(t, dir, rel, "Deployment", "demo", 0)
+
+	results := []resourcesresults.Result{
+		{
+			ResourceID:  res.GetID(),
+			RawResource: res,
+			AssociatedControls: []resourcesresults.ResourceAssociatedControl{
+				// Mixed control: one concrete fix + one YOUR_-gated fix.
+				failedControl("C-1234", "Mixed control",
+					failedRuleWithFix("spec.containers[0].securityContext.privileged", "false"),
+					failedRuleWithFix("metadata.labels.app", "YOUR_APP"),
+				),
+			},
+		},
+	}
+	h := newHandlerForResources(dir, results, nil, true /* skipUserValues */)
+	rtf := h.PrepareResourcesToFix(context.Background())
+
+	assert.NotEmpty(t, rtf, "fixable portion should still produce a resource to fix")
+	assert.Equal(t, 0, h.FixedControlsCount(), "partial control must not be counted as fully fixed")
+	if assert.Len(t, h.UnfixedControls(), 1) {
+		u := h.UnfixedControls()[0]
+		assert.Equal(t, "C-1234", u.ControlID)
+		assert.Equal(t, "Deployment", u.ResourceKind)
+		assert.Equal(t, "demo", u.ResourceName)
+		assert.Contains(t, strings.ToLower(u.Reason), "partial",
+			"reason must indicate this is a partially-fixable control")
+	}
+}
+
 func TestPrepareResourcesToFix_SkipUserValuesReason(t *testing.T) {
 	dir := t.TempDir()
 	manifest := writeManifest(t, dir, "deploy.yaml", "apiVersion: apps/v1\nkind: Deployment\n")
@@ -357,6 +395,22 @@ func TestPrepareResourcesToFix_ResetsBetweenCalls(t *testing.T) {
 
 // --- PrintUnfixedControls dedup ------------------------------------------
 
+func TestDedupUnfixedControls(t *testing.T) {
+	input := []UnfixedControl{
+		{ControlID: "C-0041", ControlName: "HostNetwork", ResourceKind: "Deployment", ResourceName: "x", FilePath: "/f.yaml", Reason: "no auto-fix"},
+		{ControlID: "C-0041", ControlName: "HostNetwork", ResourceKind: "Deployment", ResourceName: "x", FilePath: "/f.yaml", Reason: "no auto-fix"},
+		{ControlID: "C-0038", ControlName: "HostPID", ResourceKind: "Deployment", ResourceName: "x", FilePath: "/f.yaml", Reason: "no auto-fix"},
+	}
+
+	deduped := dedupUnfixedControls(input)
+
+	assert.Len(t, deduped, 2, "duplicate C-0041 entry must be collapsed")
+	assert.Equal(t, "C-0041", deduped[0].ControlID)
+	assert.Equal(t, "C-0038", deduped[1].ControlID)
+	// Original input is unchanged.
+	assert.Len(t, input, 3)
+}
+
 func TestPrintUnfixedControls_Dedups(t *testing.T) {
 	h := &FixHandler{
 		fixedControlsCount: 1,
@@ -367,11 +421,8 @@ func TestPrintUnfixedControls_Dedups(t *testing.T) {
 		},
 	}
 
-	// We can't directly capture logger output here, but we can at least
-	// verify it doesn't panic and the dedup helper logic doesn't blow up.
+	// Verify PrintUnfixedControls doesn't panic and the backing slice is unchanged.
 	h.PrintUnfixedControls(PhaseApplied)
-
-	// And the underlying slice is unchanged (we only dedup at print time).
 	assert.Len(t, h.unfixedControls, 3)
 }
 

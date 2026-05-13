@@ -45,7 +45,8 @@ func NewFixHandler(fixInfo *metav1.FixInfo) (*FixHandler, error) {
 	if err = json.Unmarshal(byteValue, &reportObj); err != nil {
 		// Heuristic: if the file looks like YAML rather than JSON, give the
 		// user a clearer message than the raw json decoder error.
-		trimmed := strings.TrimLeft(string(byteValue), " \t\r\n")
+		trimmed := strings.TrimPrefix(string(byteValue), "\ufeff")
+		trimmed = strings.TrimLeft(trimmed, " \t\r\n")
 		if !strings.HasPrefix(trimmed, "{") && !strings.HasPrefix(trimmed, "[") {
 			return nil, fmt.Errorf("%q does not look like a kubescape JSON scan report. Run `kubescape scan --format json --output <file>` first and pass that file to `kubescape fix`", fixInfo.ReportFile)
 		}
@@ -265,6 +266,22 @@ const (
 	PhaseApplied
 )
 
+// dedupUnfixedControls returns a deduplicated copy of the unfixed controls
+// slice, using ControlID|Kind/Name|FilePath as the dedup key.
+func dedupUnfixedControls(controls []UnfixedControl) []UnfixedControl {
+	seen := make(map[string]bool, len(controls))
+	out := make([]UnfixedControl, 0, len(controls))
+	for _, u := range controls {
+		key := u.ControlID + "|" + u.ResourceKind + "/" + u.ResourceName + "|" + u.FilePath
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, u)
+	}
+	return out
+}
+
 // PrintUnfixedControls logs the failed (resource, control) tuples that require
 // manual remediation, deduplicating entries across multiple identical failures.
 // The verb on the summary line reflects phase: "Auto-fixed" only when every
@@ -274,7 +291,7 @@ func (h *FixHandler) PrintUnfixedControls(phase Phase) {
 		return
 	}
 
-	seen := make(map[string]bool, len(h.unfixedControls))
+	deduped := dedupUnfixedControls(h.unfixedControls)
 	var sb strings.Builder
 	totalFailed := h.fixedControlsCount + len(h.unfixedControls)
 
@@ -285,13 +302,7 @@ func (h *FixHandler) PrintUnfixedControls(phase Phase) {
 	sb.WriteString(fmt.Sprintf("%s %d of %d flagged control instances. The following require manual remediation:\n",
 		verb, h.fixedControlsCount, totalFailed))
 
-	for _, u := range h.unfixedControls {
-		key := u.ControlID + "|" + u.ResourceKind + "/" + u.ResourceName + "|" + u.FilePath
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-
+	for _, u := range deduped {
 		location := u.FilePath
 		if location == "" {
 			location = "<unknown>"
