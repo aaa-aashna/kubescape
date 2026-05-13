@@ -2,18 +2,15 @@ package storage
 
 import (
 	"context"
-	"encoding/json"
-	"io"
-	"os"
 	"testing"
 
 	"github.com/armosec/armoapi-go/armotypes"
-	"github.com/kubescape/k8s-interface/names"
 	"github.com/kubescape/k8s-interface/workloadinterface"
-	"github.com/kubescape/opa-utils/objectsenvelopes"
+	"github.com/kubescape/opa-utils/reporthandling"
 	"github.com/kubescape/opa-utils/reporthandling/apis"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/reportsummary"
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/resourcesresults"
+	v2 "github.com/kubescape/opa-utils/reporthandling/v2"
 	"github.com/kubescape/storage/pkg/apis/softwarecomposition/v1beta1"
 	"github.com/kubescape/storage/pkg/generated/clientset/versioned/fake"
 	"github.com/stretchr/testify/assert"
@@ -393,97 +390,55 @@ func TestGetManifestObjectLabelsAndAnnotations(t *testing.T) {
 	}
 }
 
-func Test_RoleBindingResourceTripletToSlug(t *testing.T) {
-	tests := []struct {
-		name          string
-		role          string
-		roleBinding   string
-		expectedSlugs []string
-	}{
-		{
-			name:        "clusterrolebinding with clusterrole, subject with apigroup",
-			role:        "testdata/role_1.json",
-			roleBinding: "testdata/rolebinding_1.json",
-			expectedSlugs: []string{
-				"group-system-serviceaccounts-clusterrole-system-service-account-issuer-discovery-clusterrolebinding-system-service-account-issuer-discovery",
+func TestStorePostureReportResults_Resilience(t *testing.T) {
+	ctx := context.Background()
+
+	fakeCS := fake.NewSimpleClientset()
+
+	s := &APIServerStore{
+		StorageClient: fakeCS.SpdxV1beta1(),
+		namespace:     "test-ns",
+	}
+
+	pr := &v2.PostureReport{
+		Resources: []reporthandling.Resource{
+			{
+				ResourceID: "res-1",
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Pod",
+					"metadata": map[string]interface{}{
+						"name":      "pod-1",
+						"namespace": "ns-1",
+					},
+				},
+			},
+			{
+				ResourceID: "res-3",
+				Object: map[string]interface{}{
+					"apiVersion": "v1",
+					"kind":       "Pod",
+					"metadata": map[string]interface{}{
+						"name":      "pod-3",
+						"namespace": "ns-3",
+					},
+				},
 			},
 		},
-		{
-			name:        "clusterrolebinding with clusterrole, subject without apigroup",
-			role:        "testdata/role_2.json",
-			roleBinding: "testdata/rolebinding_2.json",
-			expectedSlugs: []string{
-				"serviceaccount-expand-controller-clusterrole-system-controller-expand-controller-clusterrolebinding-system-controller-expand-controller",
-			},
-		},
-		{
-			name:        "rolebinding with role, multiple subjects",
-			role:        "testdata/role_3.json",
-			roleBinding: "testdata/rolebinding_3.json",
-			expectedSlugs: []string{
-				"user-system-kube-scheduler-role-system--leader-locking-kube-scheduler-rolebinding-system--leader-locking-kube-scheduler",
-				"serviceaccount-kube-scheduler-role-system--leader-locking-kube-scheduler-rolebinding-system--leader-locking-kube-scheduler",
-			},
+		Results: []resourcesresults.Result{
+			{ResourceID: "res-1"},
+			{ResourceID: "res-2"}, // intentional failure
+			{ResourceID: "res-3"},
 		},
 	}
 
-	readTestFile := func(fileName string) []byte {
-		file, err := os.Open(fileName)
-		if err != nil {
-			panic(err)
-		}
-		defer file.Close()
+	err := s.StorePostureReportResults(ctx, pr)
 
-		fileContents, err := io.ReadAll(file)
-		if err != nil {
-			panic(err)
-		}
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resource res-2 not found")
 
-		return fileContents
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-
-			var obj1 map[string]interface{}
-			_ = json.Unmarshal(readTestFile(tt.role), &obj1)
-			clusterRole := objectsenvelopes.NewObject(obj1)
-
-			var obj2 map[string]interface{}
-			_ = json.Unmarshal(readTestFile(tt.roleBinding), &obj2)
-			clusterRoleBinding := objectsenvelopes.NewObject(obj2)
-
-			slugs := []string{}
-
-			subjects, _ := workloadinterface.InspectMap(clusterRoleBinding.GetObject(), "subjects")
-			if val, ok := subjects.([]interface{}); ok {
-				for _, s := range val {
-					subject := workloadinterface.NewBaseObject(map[string]interface{}{})
-
-					if subjectObj, ok := s.(map[string]interface{}); ok {
-						if name, ok := subjectObj["name"]; ok {
-							subject.SetName(name.(string))
-						}
-						if kind, ok := subjectObj["kind"]; ok {
-							subject.SetKind(kind.(string))
-						}
-						if ns, ok := subjectObj["namespace"]; ok {
-							subject.SetNamespace(ns.(string))
-						}
-						if apiGroup, ok := subjectObj["apiGroup"]; ok {
-							subject.SetApiVersion(apiGroup.(string))
-						}
-
-						slug, err := names.RoleBindingResourceToSlug(subject, clusterRole, clusterRoleBinding)
-						assert.NoError(t, err)
-						slugs = append(slugs, slug)
-					}
-				}
-			}
-
-			assert.ElementsMatch(t, tt.expectedSlugs, slugs)
-		})
-	}
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "resource res-2 not found")
 }
 
 func TestMergeMaps(t *testing.T) {

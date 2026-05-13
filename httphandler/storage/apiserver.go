@@ -64,26 +64,38 @@ func NewAPIServerStorage(clusterName string, namespace string, ksClient spdxv1be
 }
 
 func (a *APIServerStore) StorePostureReportResults(ctx context.Context, pr *v2.PostureReport) error {
+	var firstErr error
 	for i := range pr.Results {
 		workloadScan, err := a.BuildWorkloadConfigurationScan(ctx, pr, &pr.Results[i])
 		if err != nil {
-			return err
+			logger.L().Ctx(ctx).Error("failed to build workload configuration scan", helpers.Error(err))
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
 
 		// Only store full WorkloadConfigurationScan when continuousPostureScan is enabled
 		if a.continuousPostureScan {
 			if err := a.StoreWorkloadConfigurationScanResult(ctx, workloadScan); err != nil {
-				return err
+				logger.L().Ctx(ctx).Error("failed to store workload configuration scan result", helpers.Error(err), helpers.String("name", workloadScan.Name))
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
 			}
 		}
 
 		// Always store summaries for headlamp plugin
 		if _, err := a.StoreWorkloadConfigurationScanResultSummary(ctx, workloadScan); err != nil {
-			return err
+			logger.L().Ctx(ctx).Error("failed to store workload configuration scan summary", helpers.Error(err), helpers.String("name", workloadScan.Name))
+			if firstErr == nil {
+				firstErr = err
+			}
 		}
 
 	}
-	return nil
+	return firstErr
 }
 
 func getControlsMapFromResult(ctx context.Context, result *resourcesresults.Result, controlSummaries reportsummary.ControlSummaries) map[string]v1beta1.ScannedControl {
