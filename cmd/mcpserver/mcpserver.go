@@ -320,7 +320,10 @@ func (ksServer *KubescapeMcpserver) CallTool(name string, arguments map[string]i
 			"vulnerability_manifest_cve_details": "kubescape://vulnerability-manifests/{namespace}/{manifest_name}/cve_details/{cve_id}",
 		}
 
-		content, _ := json.Marshal(result)
+		content, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal result: %s", err)
+		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				mcp.TextContent{
@@ -444,7 +447,10 @@ func (ksServer *KubescapeMcpserver) CallTool(name string, arguments map[string]i
 				"configuration_manifest_details": "kubescape://configuration-manifests/{namespace}/{manifest_name}",
 			},
 		}
-		content, _ := json.Marshal(result)
+		content, err := json.Marshal(result)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal result: %s", err)
+		}
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				mcp.TextContent{
