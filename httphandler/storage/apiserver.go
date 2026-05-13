@@ -486,8 +486,7 @@ func parseScannedControlRules(control *resourcesresults.ResourceAssociatedContro
 
 		controlConfigurations := ruleToControlConfigurations(rule)
 
-		relatedResourceIds := []string{}
-		copy(relatedResourceIds, rule.RelatedResourcesIDs)
+		relatedResourceIds := append([]string(nil), rule.RelatedResourcesIDs...)
 		rules[i] = v1beta1.ScannedControlRule{
 			Name: rule.GetName(),
 			Status: v1beta1.RuleStatus{
