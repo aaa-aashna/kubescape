@@ -54,33 +54,65 @@ func TestGetScanCommandWithAccessKey(t *testing.T) {
 	assert.False(t, s.Submit)
 }
 
-func TestFindFile_EarlyExit(t *testing.T) {
-	// Create a temp dir with multiple files
+func TestReadResultsFile(t *testing.T) {
 	dir := t.TempDir()
-	// Create target file and extra files
-	targetFile := dir + "/target-abc123.json"
+
+	// Temporarily override OutputDir for tests
+	oldOutputDir := OutputDir
+	OutputDir = dir
+	defer func() { OutputDir = oldOutputDir }()
+
+	validUUID := "123e4567-e89b-12d3-a456-426614174000"
+	targetFile := dir + "/" + validUUID + ".json"
 	otherFile := dir + "/other-xyz.json"
+
 	err := os.WriteFile(targetFile, []byte("{}"), 0644)
 	assert.NoError(t, err)
 	err = os.WriteFile(otherFile, []byte("{}"), 0644)
 	assert.NoError(t, err)
 
-	// findFile should find the target and stop early
-	found, err := findFile(dir, "target-abc123")
+	// readResultsFile should find the target via exact match
+	_, err = readResultsFile(validUUID)
 	assert.NoError(t, err)
-	assert.Contains(t, found, "target-abc123")
+
+	// readResultsFile should not find a non-existent UUID
+	_, err = readResultsFile("111e4567-e89b-12d3-a456-426614174000")
+	assert.ErrorContains(t, err, "file 111e4567-e89b-12d3-a456-426614174000 not found")
+
+	// readResultsFile should reject invalid UUID formats
+	_, err = readResultsFile("invalid-uuid")
+	assert.ErrorContains(t, err, "invalid scan ID format")
+
+	// readResultsFile should prevent path traversal
+	_, err = readResultsFile("../target")
+	assert.ErrorContains(t, err, "invalid scan ID format")
 }
 
-func TestFindFile_NotFound(t *testing.T) {
+func TestRemoveResultsFile(t *testing.T) {
 	dir := t.TempDir()
-	found, err := findFile(dir, "nonexistent-file")
-	assert.NoError(t, err)
-	assert.Equal(t, "", found)
-}
 
-func TestFindFile_MissingDir(t *testing.T) {
-	// WalkDir skips the root error same as per-entry errors; missing dir returns empty string and nil
-	found, err := findFile("/nonexistent/dir", "file")
+	// Temporarily override OutputDir for tests
+	oldOutputDir := OutputDir
+	OutputDir = dir
+	defer func() { OutputDir = oldOutputDir }()
+
+	validUUID := "123e4567-e89b-12d3-a456-426614174000"
+	targetFile := dir + "/" + validUUID + ".json"
+
+	err := os.WriteFile(targetFile, []byte("{}"), 0644)
 	assert.NoError(t, err)
-	assert.Equal(t, "", found)
+
+	// removeResultsFile should succeed
+	err = removeResultsFile(validUUID)
+	assert.NoError(t, err)
+	_, statErr := os.Stat(targetFile)
+	assert.True(t, os.IsNotExist(statErr))
+
+	// removeResultsFile should ignore invalid UUID formats
+	err = removeResultsFile("invalid-uuid")
+	assert.NoError(t, err) // Logs warning, but no error returned
+
+	// removeResultsFile should prevent path traversal
+	err = removeResultsFile("../target")
+	assert.NoError(t, err)
 }
