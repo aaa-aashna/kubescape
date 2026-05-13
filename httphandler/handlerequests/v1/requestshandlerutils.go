@@ -233,7 +233,11 @@ func writeScanErrorToFile(err error, scanID string) error {
 	if e != nil {
 		return fmt.Errorf("failed to scan. reason: '%s'. failed to save error in file - failed to open file for writing. reason: %s", err.Error(), e.Error())
 	}
-	defer f.Close()
+	defer func() {
+		if cerr := f.Close(); cerr != nil && e == nil {
+			e = fmt.Errorf("failed to close scan error file: %w", cerr)
+		}
+	}()
 
 	if _, e := f.Write([]byte(err.Error())); e != nil {
 		return fmt.Errorf("failed to scan. reason: '%s'. failed to save error in file - failed to write. reason: %s", err.Error(), e.Error())
