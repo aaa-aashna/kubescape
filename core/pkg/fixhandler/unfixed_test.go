@@ -432,6 +432,53 @@ func TestNewFixHandler_RejectsDirectory(t *testing.T) {
 	}
 }
 
+// --- ApplyChanges accounting --------------------------------------------
+
+func TestApplyChanges_OnlyCountsSuccessfulWrites(t *testing.T) {
+	dir := t.TempDir()
+	manifest := writeManifest(t, dir, "deploy.yaml",
+		"apiVersion: v1\nkind: Pod\nmetadata:\n  name: x\nspec:\n  containers:\n  - name: c\n    image: nginx\n")
+
+	// Make the file read-only so writeFixesToFile will fail even after the
+	// in-memory fix succeeds. This is the exact corner the accounting bug hid:
+	// pre-fix, the file was marked "updated" before the write was attempted.
+	if err := os.Chmod(manifest, 0444); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	// Make the directory read-only too, otherwise os.WriteFile on Linux can
+	// truncate-and-rewrite via the parent dir's perms on some filesystems.
+	if err := os.Chmod(dir, 0555); err != nil {
+		t.Fatalf("chmod dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0755) })
+
+	h := &FixHandler{fixInfo: &metav1.FixInfo{}, reportObj: &reporthandlingv2.PostureReport{}, localBasePath: dir}
+	rfi := ResourceFixInfo{
+		FilePath:        manifest,
+		YamlExpressions: map[string]armotypes.FixPath{},
+		DocumentIndex:   0,
+	}
+	rfi.YamlExpressions["select(di==0).spec.containers[0].image |= \"nginx:1.25\""] = armotypes.FixPath{
+		Path: "spec.containers[0].image", Value: "nginx:1.25",
+	}
+
+	count, errs := h.ApplyChanges(context.Background(), []ResourceFixInfo{rfi})
+	assert.Equal(t, 0, count, "write failed → file must not be counted as updated")
+	assert.NotEmpty(t, errs)
+}
+
+func TestUnfixedControls_ReturnsCopy(t *testing.T) {
+	h := &FixHandler{
+		unfixedControls: []UnfixedControl{
+			{ControlID: "C-0001", ControlName: "orig"},
+		},
+	}
+	got := h.UnfixedControls()
+	got[0].ControlName = "mutated"
+	assert.Equal(t, "orig", h.unfixedControls[0].ControlName,
+		"caller mutation must not leak into internal state")
+}
+
 func TestNewFixHandler_AcceptsValidReport(t *testing.T) {
 	dir := t.TempDir()
 	report := reporthandlingv2.PostureReport{

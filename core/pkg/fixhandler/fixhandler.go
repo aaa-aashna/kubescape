@@ -231,7 +231,9 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 // UnfixedControls returns the failed (resource, control) tuples discovered during
 // the most recent call to PrepareResourcesToFix that the fixer did not auto-remediate.
 func (h *FixHandler) UnfixedControls() []UnfixedControl {
-	return h.unfixedControls
+	out := make([]UnfixedControl, len(h.unfixedControls))
+	copy(out, h.unfixedControls)
+	return out
 }
 
 // FixedControlsCount returns the number of failed (resource, control) tuples that
@@ -334,16 +336,15 @@ func (h *FixHandler) ApplyChanges(ctx context.Context, resourcesToFix []Resource
 		if err != nil {
 			errors = append(errors, fmt.Errorf("failed to fix file %s: %w ", filepath, err))
 			continue
-		} else {
-			updatedFiles[filepath] = true
 		}
 
-		err = writeFixesToFile(filepath, fixedYamlString)
-
-		if err != nil {
+		if err := writeFixesToFile(filepath, fixedYamlString); err != nil {
 			logger.L().Ctx(ctx).Warning(fmt.Sprintf("Failed to write fixes to file %s, %v", filepath, err.Error()))
 			errors = append(errors, err)
+			continue
 		}
+
+		updatedFiles[filepath] = true
 	}
 
 	return len(updatedFiles), errors
