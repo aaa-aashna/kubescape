@@ -83,7 +83,7 @@ func (opap *OPAProcessor) ProcessRulesListener(ctx context.Context, progressList
 
 	scorewrapper := score.NewScoreWrapper(opap.OPASessionObj)
 	if err := scorewrapper.Calculate(score.EPostureReportV2); err != nil {
-		logger.L().Warning("failed to calculate score", helpers.Error(err))
+		logger.L().Ctx(ctx).Warning("failed to calculate score", helpers.Error(err))
 	}
 
 	return processErr
