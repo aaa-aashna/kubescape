@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -292,7 +291,7 @@ func (ksServer *KubescapeMcpserver) CallTool(name string, arguments map[string]i
 			return nil, err
 		}
 
-		log.Printf("Found %d manifests", len(manifests.Items))
+		logger.L().Info(fmt.Sprintf("Found %d manifests", len(manifests.Items)))
 
 		vulnerabilityManifests := []map[string]interface{}{}
 		for _, manifest := range manifests.Items {
@@ -429,7 +428,7 @@ func (ksServer *KubescapeMcpserver) CallTool(name string, arguments map[string]i
 		if err != nil {
 			return nil, err
 		}
-		log.Printf("Found %d configuration manifests", len(manifests.Items))
+		logger.L().Info(fmt.Sprintf("Found %d configuration manifests", len(manifests.Items)))
 		configManifests := []map[string]interface{}{}
 		for _, manifest := range manifests.Items {
 			item := map[string]interface{}{
