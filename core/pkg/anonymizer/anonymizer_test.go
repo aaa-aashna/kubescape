@@ -163,7 +163,9 @@ func TestAnonymizeSession_IDConsistencyAcrossMaps(t *testing.T) {
 		},
 
 		// path 3: ResourceAttackTracks
-		ResourceAttackTracks: make(map[string]v1alpha1.IAttackTrack),
+		ResourceAttackTracks: map[string]v1alpha1.IAttackTrack{
+			oldID: &v1alpha1.AttackTrack{},
+		},
 
 		// path 6: Report.SummaryDetails.Controls[*].ResourceIDs
 		Report: &reporthandlingv2.PostureReport{
@@ -218,4 +220,8 @@ func TestAnonymizeSession_IDConsistencyAcrossMaps(t *testing.T) {
 	allIDs := control.ResourceIDs.All()
 	_, found := allIDs[newID]
 	assert.True(t, found, "Report.SummaryDetails.Controls ResourceIDs must use remapped ID")
+
+	// path 3: ResourceAttackTracks key
+	_, inAttackTracks := session.ResourceAttackTracks[newID]
+	assert.True(t, inAttackTracks, "ResourceAttackTracks must use remapped ID as key")
 }
