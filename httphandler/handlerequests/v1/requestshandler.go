@@ -161,6 +161,16 @@ func (handler *HTTPHandler) Results(w http.ResponseWriter, r *http.Request) {
 	}
 	logger.L().Info("requesting results", helpers.String("scanID", resultsQueryParams.ScanID), helpers.String("api", "v1/results"), helpers.String("method", r.Method))
 
+	if r.Method == http.MethodDelete && resultsQueryParams.AllResults {
+		logger.L().Info("deleting all results")
+		if err := handler.state.removeAllIfIdle(removeResultDirs); err != nil {
+			handler.writeError(w, err, resultsQueryParams.ScanID)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
 	isLatestFallback := false
 	if resultsQueryParams.ScanID == "" {
 		if handler.offline {
@@ -223,18 +233,11 @@ func (handler *HTTPHandler) Results(w http.ResponseWriter, r *http.Request) {
 	case http.MethodDelete:
 		logger.L().Info("deleting results", helpers.String("ID", resultsQueryParams.ScanID))
 
-		if resultsQueryParams.AllResults {
-			if err := handler.state.removeAllIfIdle(removeResultDirs); err != nil {
-				handler.writeError(w, err, resultsQueryParams.ScanID)
-				return
-			}
-		} else {
-			if isLatestFallback {
-				handler.writeError(w, fmt.Errorf("scan ID must be provided for deletion"), resultsQueryParams.ScanID)
-				return
-			}
-			removeResultsFile(resultsQueryParams.ScanID)
+		if isLatestFallback {
+			handler.writeError(w, fmt.Errorf("scan ID must be provided for deletion"), resultsQueryParams.ScanID)
+			return
 		}
+		removeResultsFile(resultsQueryParams.ScanID)
 		w.WriteHeader(http.StatusOK)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
