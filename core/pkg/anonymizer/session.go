@@ -26,6 +26,7 @@ func anonymizeSession(session *cautils.OPASessionObj, mapping *Mapping) {
 		if namespace := resource.GetNamespace(); namespace != "" {
 			resource.SetNamespace(mapping.GetOrCreate("ns", namespace))
 		}
+		anonymizeContainerMetadata(resource, mapping)
 
 		newID := resource.GetID()
 		idMapping[oldID] = newID
