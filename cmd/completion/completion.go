@@ -45,7 +45,7 @@ func GetCompletionCmd() *cobra.Command {
 			case "powershell":
 				cmd.Root().GenPowerShellCompletionWithDesc(os.Stdout)
 			default:
-				fmt.Printf("Invalid arguement %s", args[0])
+				fmt.Printf("Invalid argument %s", args[0])
 			}
 		},
 	}
