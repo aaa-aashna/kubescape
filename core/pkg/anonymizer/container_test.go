@@ -79,3 +79,26 @@ func TestAnonymizeContainerList_NilValue(t *testing.T) {
 	m := NewMapping()
 	anonymizeContainerList(obj, "containers", m)
 }
+
+func TestAnonymizeEphemeralContainerList_AnonymizesNamesAndImages(t *testing.T) {
+	// Simulate runtime shape: []interface{} with map[string]interface{} items
+	obj := map[string]interface{}{
+		"ephemeralContainers": []interface{}{
+			map[string]interface{}{
+				"name":  "debug-container",
+				"image": "private.registry.io/debug:v1",
+			},
+		},
+	}
+
+	m := NewMapping()
+	anonymizeEphemeralContainerList(obj, "ephemeralContainers", m)
+
+	containers, ok := obj["ephemeralContainers"].([]corev1.EphemeralContainer)
+	assert.True(t, ok, "after fix, ephemeral containers must be []corev1.EphemeralContainer")
+	assert.Len(t, containers, 1)
+	assert.NotEqual(t, "debug-container", containers[0].Name)
+	assert.NotEqual(t, "private.registry.io/debug:v1", containers[0].Image)
+	assert.Contains(t, containers[0].Name, "ctr-")
+	assert.Contains(t, containers[0].Image, "img-")
+}
