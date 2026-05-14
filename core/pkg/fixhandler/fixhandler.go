@@ -511,8 +511,12 @@ func GetFileString(filepath string) (string, error) {
 }
 
 func writeFixesToFile(filepath, content string) error {
-	err := os.WriteFile(filepath, []byte(content), 0644) //nolint:gosec
+	info, err := os.Stat(filepath)
+	if err != nil {
+		return fmt.Errorf("error getting file permissions: %w", err)
+	}
 
+	err = os.WriteFile(filepath, []byte(content), info.Mode()) //nolint:gosec
 	if err != nil {
 		return fmt.Errorf("error writing fixes to file: %w", err)
 	}

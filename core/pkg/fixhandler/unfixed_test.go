@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/kubescape/opa-utils/reporthandling/results/v1/resourcesresults"
 	reporthandlingv2 "github.com/kubescape/opa-utils/reporthandling/v2"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // --- helpers --------------------------------------------------------------
@@ -203,7 +205,7 @@ func TestPrepareResourcesToFix_ClassifiesFixedAndUnfixed(t *testing.T) {
 
 	results := []resourcesresults.Result{
 		{
-			ResourceID: res.GetID(),
+			ResourceID:  res.GetID(),
 			RawResource: res,
 			AssociatedControls: []resourcesresults.ResourceAssociatedControl{
 				// fixable
@@ -281,7 +283,7 @@ func TestPrepareResourcesToFix_SkipUserValuesReason(t *testing.T) {
 
 	results := []resourcesresults.Result{
 		{
-			ResourceID: res.GetID(),
+			ResourceID:  res.GetID(),
 			RawResource: res,
 			AssociatedControls: []resourcesresults.ResourceAssociatedControl{
 				failedControl("C-0076", "Label usage",
@@ -306,7 +308,7 @@ func TestPrepareResourcesToFix_MissingFile(t *testing.T) {
 
 	results := []resourcesresults.Result{
 		{
-			ResourceID: res.GetID(),
+			ResourceID:  res.GetID(),
 			RawResource: res,
 			AssociatedControls: []resourcesresults.ResourceAssociatedControl{
 				failedControl("C-0057", "Privileged",
@@ -332,7 +334,7 @@ func TestPrepareResourcesToFix_NonYamlSource(t *testing.T) {
 
 	results := []resourcesresults.Result{
 		{
-			ResourceID: res.GetID(),
+			ResourceID:  res.GetID(),
 			RawResource: res,
 			AssociatedControls: []resourcesresults.ResourceAssociatedControl{
 				failedControl("C-0057", "Privileged",
@@ -493,6 +495,34 @@ func TestApplyChanges_OnlyCountsSuccessfulWrites(t *testing.T) {
 	count, errs := h.ApplyChanges(context.Background(), []ResourceFixInfo{rfi})
 	assert.Equal(t, 0, count, "write failed → file must not be counted as updated")
 	assert.NotEmpty(t, errs)
+}
+
+func TestWriteFixesToFile_PreservesFilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file permission semantics differ on windows")
+	}
+
+	dir := t.TempDir()
+
+	manifest := writeManifest(t, dir, "deploy.yaml",
+		"apiVersion: v1\nkind: Pod\n")
+
+	originalMode := os.FileMode(0600)
+
+	if err := os.Chmod(manifest, originalMode); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+
+	err := writeFixesToFile(manifest,
+		"apiVersion: v1\nkind: Pod\nmetadata:\n  name: updated\n",
+	)
+
+	require.NoError(t, err)
+
+	info, err := os.Stat(manifest)
+	require.NoError(t, err)
+
+	assert.Equal(t, originalMode, info.Mode().Perm())
 }
 
 func TestUnfixedControls_ReturnsCopy(t *testing.T) {
