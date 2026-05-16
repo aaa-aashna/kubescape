@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -153,6 +153,10 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 			skipReason = "skipped: source is not a YAML file"
 		}
 
+
+		if resourceObj.Source == nil || resourceObj.Source.FileType != reporthandling.SourceTypeYaml {
+			continue
+ (fix: preserve absolute paths in PrepareResourcesToFix)
 		var absolutePath string
 		var documentIndex int
 		if skipReason == "" {
@@ -163,11 +167,20 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 			} else {
 				absolutePath = path.Join(h.localBasePath, relativePath)
 				documentIndex = idx
+
+
+				absolutePath = resolveResourcePath(h.localBasePath, relativePath)
+
+				documentIndex = idx
+
+ (fix: preserve absolute paths in PrepareResourcesToFix)
 				if _, err := os.Stat(absolutePath); err != nil {
 					logger.L().Ctx(ctx).Warning("Skipping missing file: " + absolutePath)
 					skipReason = "skipped: file not found"
 				}
 			}
+(fix: preserve absolute paths in PrepareResourcesToFix)
+ (fix: preserve absolute paths in PrepareResourcesToFix)
 		}
 
 		if skipReason != "" {
@@ -238,6 +251,15 @@ func (h *FixHandler) PrepareResourcesToFix(ctx context.Context) []ResourceFixInf
 	return resourcesToFix
 }
 
+func resolveResourcePath(basePath, resourcePath string) string {
+	if isAbsolutePath(resourcePath) {
+		return resourcePath
+	}
+
+	return filepath.Join(basePath, resourcePath)
+}
+
+>>>>>>> 59e343cd (fix: preserve absolute paths in PrepareResourcesToFix)
 // UnfixedControls returns the failed (resource, control) tuples discovered during
 // the most recent call to PrepareResourcesToFix that the fixer did not auto-remediate.
 func (h *FixHandler) UnfixedControls() []UnfixedControl {
@@ -294,6 +316,8 @@ func (h *FixHandler) PrintUnfixedControls(phase Phase) {
 	deduped := dedupUnfixedControls(h.unfixedControls)
 	var sb strings.Builder
 	totalFailed := h.fixedControlsCount + len(deduped)
+	totalFailed := h.fixedControlsCount + len(h.unfixedControls)
+ (fix: preserve absolute paths in PrepareResourcesToFix)
 	verb := "Would auto-fix"
 	if phase == PhaseApplied {
 		verb = "Auto-fixed"
@@ -312,7 +336,8 @@ func (h *FixHandler) PrintUnfixedControls(phase Phase) {
 
 	logger.L().Warning(sb.String())
 }
-
+ (fix: preserve absolute paths in PrepareResourcesToFix)
+>>>>>>> 59e343cd (fix: preserve absolute paths in PrepareResourcesToFix)
 func (h *FixHandler) PrintExpectedChanges(resourcesToFix []ResourceFixInfo) {
 	var sb strings.Builder
 	sb.WriteString("The following changes will be applied:\n")
@@ -383,6 +408,15 @@ func (h *FixHandler) getFilePathAndIndex(filePathWithIndex string) (filePath str
 	}
 
 	return filePath, documentIndex, nil
+}
+
+func isAbsolutePath(p string) bool {
+	if filepath.IsAbs(p) {
+		return true
+	}
+
+	matched, _ := regexp.MatchString(`^[a-zA-Z]:\\`, p)
+	return matched
 }
 
 func ApplyFixToContent(ctx context.Context, yamlAsString, yamlExpression string) (fixedString string, err error) {
