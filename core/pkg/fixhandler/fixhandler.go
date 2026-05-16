@@ -368,17 +368,21 @@ func (h *FixHandler) ApplyChanges(ctx context.Context, resourcesToFix []Resource
 }
 
 func (h *FixHandler) getFilePathAndIndex(filePathWithIndex string) (filePath string, documentIndex int, err error) {
-	splittedPath := strings.Split(filePathWithIndex, ":")
-	if len(splittedPath) <= 1 {
+	lastColonIndex := strings.LastIndex(filePathWithIndex, ":")
+
+	if lastColonIndex == -1 {
 		return "", 0, fmt.Errorf("expected to find ':' in file path")
 	}
 
-	filePath = splittedPath[0]
-	if documentIndex, err := strconv.Atoi(splittedPath[1]); err != nil {
+	filePath = filePathWithIndex[:lastColonIndex]
+	indexPart := filePathWithIndex[lastColonIndex+1:]
+
+	documentIndex, err = strconv.Atoi(indexPart)
+	if err != nil {
 		return "", 0, err
-	} else {
-		return filePath, documentIndex, nil
 	}
+
+	return filePath, documentIndex, nil
 }
 
 func ApplyFixToContent(ctx context.Context, yamlAsString, yamlExpression string) (fixedString string, err error) {

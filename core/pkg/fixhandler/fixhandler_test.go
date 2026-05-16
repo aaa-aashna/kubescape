@@ -654,3 +654,57 @@ func TestGetLocalPath(t *testing.T) {
 		})
 	}
 }
+
+func TestGetFilePathAndIndex(t *testing.T) {
+	h := &FixHandler{}
+
+	tests := []struct {
+		name          string
+		input         string
+		expectedPath  string
+		expectedIndex int
+		expectError   bool
+	}{
+		{
+			name:          "windows absolute path",
+			input:         `C:\Users\admin\deploy.yaml:2`,
+			expectedPath:  `C:\Users\admin\deploy.yaml`,
+			expectedIndex: 2,
+			expectError:   false,
+		},
+		{
+			name:          "unix path",
+			input:         "/tmp/deploy.yaml:1",
+			expectedPath:  "/tmp/deploy.yaml",
+			expectedIndex: 1,
+			expectError:   false,
+		},
+		{
+			name:          "unix path containing colon",
+			input:         "/tmp/app:service/deploy.yaml:3",
+			expectedPath:  "/tmp/app:service/deploy.yaml",
+			expectedIndex: 3,
+			expectError:   false,
+		},
+		{
+			name:        "missing index separator",
+			input:       "/tmp/deploy.yaml",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, index, err := h.getFilePathAndIndex(tt.input)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedPath, path)
+			assert.Equal(t, tt.expectedIndex, index)
+		})
+	}
+}
