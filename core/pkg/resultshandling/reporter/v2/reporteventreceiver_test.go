@@ -412,8 +412,16 @@ func TestSetResults_ChunkBoundary(t *testing.T) {
 		},
 	}
 
+	opaSession := mockOPASessionObj(t)
+	require.NotEmpty(t, opaSession.AllResources)
+	var resourceMetadata workloadinterface.IMetadata
+	for _, r := range opaSession.AllResources {
+		resourceMetadata = r
+		break
+	}
+
 	allResources := map[string]workloadinterface.IMetadata{
-		"resource-1": nil,
+		"resource-1": resourceMetadata,
 	}
 
 	resourceSources := map[string]reporthandling.Source{
