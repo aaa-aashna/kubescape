@@ -142,7 +142,7 @@ func (idx *Index) IngressExposure(ep Endpoint) Exposure {
 // apply elsewhere in this package.
 func classifyPeers(peers []networkingv1.NetworkPolicyPeer) (ExposureLevel, string) {
 	if len(peers) == 0 {
-		return ExposureOpen, "rule has no source restriction; matches every peer"
+		return ExposureOpen, "rule has no peer restriction; matches every peer"
 	}
 
 	best := ExposureRestricted
